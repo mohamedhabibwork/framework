@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791066253045,
+      "tag": "0000_create-products",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791107126218,
+      "tag": "0001_create-workflow-tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791107486117,
+      "tag": "0002_create-auth-tables",
+      "breakpoints": true
+    }
+  ]
+}
