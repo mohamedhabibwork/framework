@@ -6,9 +6,10 @@ import {
   type JsonValue,
   runWithExecution,
 } from '@framework/core';
-import { type Job, UnrecoverableError, Worker } from 'bullmq';
-import { type AnyJobDefinition, erase, type JobDefinition, type JobEnvelope } from './job';
+import type { Job, Worker } from 'bullmq';
+import { type AnyJobDefinition, erase, type JobDefinition } from './job';
 import type { QueueManager } from './manager';
+import { jobEnvelopeOf, type QueueKitJobData, UnrecoverableError } from './queuekit-adapter';
 
 export interface WorkerOptions {
   readonly concurrency?: number;
@@ -30,7 +31,7 @@ export type JobList = readonly JobDefinition<any, any>[];
  */
 export class JobWorker {
   readonly #jobs = new Map<string, AnyJobDefinition>();
-  readonly #worker: Worker<JobEnvelope, JsonValue>;
+  readonly #worker: Worker<QueueKitJobData, JsonValue>;
 
   constructor(
     private readonly manager: QueueManager,
@@ -42,11 +43,13 @@ export class JobWorker {
       if (this.#jobs.has(job.name)) throw new FrameworkError('DUPLICATE_JOB', `Job "${job.name}" is registered twice`);
       this.#jobs.set(job.name, erase(job));
     }
-    this.#worker = new Worker<JobEnvelope, JsonValue>(manager.queue.name, (job) => this.#process(job), {
-      connection: manager.connection,
-      prefix: manager.options.prefix,
+    // The consumer is created through the manager's queuekit transport
+    // adapter, but the processor function stays framework-owned on purpose:
+    // queuekit's consumer wrapper discards the processor's return value (the
+    // framework's JobStatus.result) and hides the raw worker needed for
+    // autorun control and the `failed` hook (see queuekit-adapter docs).
+    this.#worker = manager.transport.createWorker((job) => this.#process(job), {
       concurrency: options.concurrency ?? 4,
-      autorun: false,
     });
     this.#worker.on('failed', (job, error) =>
       this.options.onFailed?.({ id: job?.id, name: job?.name ?? 'unknown-job' }, error),
@@ -57,21 +60,25 @@ export class JobWorker {
     void this.#worker.run();
   }
 
-  async #process(job: Job<JobEnvelope, JsonValue>): Promise<JsonValue> {
+  async #process(job: Job<QueueKitJobData, JsonValue>): Promise<JsonValue> {
     const definition = this.#jobs.get(job.name);
+    // Accepts both wire shapes: jobs published through queuekit wrap the
+    // envelope, jobs added directly on the queue handle (scheduler fires)
+    // carry it raw (see queuekit-adapter).
+    const envelope = jobEnvelopeOf(job.data);
     if (!definition) throw new UnrecoverableError(`No handler registered for job "${job.name}"`);
-    if (job.data.v !== definition.version) {
-      throw new UnrecoverableError(`Job "${job.name}" v${job.data.v} cannot run on handler v${definition.version}`);
+    if (envelope.v !== definition.version) {
+      throw new UnrecoverableError(`Job "${job.name}" v${envelope.v} cannot run on handler v${definition.version}`);
     }
     let payload: ReturnType<AnyJobDefinition['parse']>;
     try {
-      payload = definition.parse(job.data.payload);
+      payload = definition.parse(envelope.payload);
     } catch (error) {
       throw new UnrecoverableError(`Invalid payload: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     const timeoutMs = definition.timeoutMs ?? this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const batchId = job.data.batchId;
+    const batchId = envelope.batchId;
     if (batchId) {
       const batchState = await this.manager.batches.state(batchId);
       if (batchState === 'cancelled') {
@@ -81,7 +88,7 @@ export class JobWorker {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const scope = this.application.createScope('job');
-    const execution = new ExecutionContext('job', job.data.correlationId, job.data.actor);
+    const execution = new ExecutionContext('job', envelope.correlationId, envelope.actor);
     scope.override(EXECUTION_CONTEXT, execution);
     try {
       // Ambient execution context for helpers inside the handler's async chain.

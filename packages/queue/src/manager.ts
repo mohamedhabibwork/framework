@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { type ExecutionContext, FrameworkError, type JsonObject, type JsonValue, token } from '@framework/core';
-import { type ConnectionOptions, type Job, Queue } from 'bullmq';
+import type { ConnectionOptions, Queue } from 'bullmq';
 import Redis, { type RedisOptions } from 'ioredis';
 import { z } from 'zod/v4';
 import { type BatchCompletionJob, type BatchRecord, BatchRegistry, type BatchState } from './batch';
 import type { JobDefinition, JobEnvelope } from './job';
+import { QueueKitAdapter } from './queuekit-adapter';
 
 export type JobState = 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'paused';
 
@@ -93,40 +94,30 @@ export function redisConnection(url: string): ConnectionOptions {
   };
 }
 
-const STATES: readonly JobState[] = ['waiting', 'active', 'completed', 'failed', 'delayed', 'paused'];
-
-async function toStatus(job: Job<JobEnvelope, JsonValue>): Promise<JobStatus | null> {
-  const state = await job.getState();
-  const known =
-    STATES.find((s) => s === state) ?? (state === 'prioritized' || state === 'waiting-children' ? 'waiting' : null);
-  if (!known || !job.id) return null;
-  return {
-    id: job.id,
-    name: job.name,
-    state: known,
-    progress: typeof job.progress === 'number' ? job.progress : 0,
-    attempts: job.attemptsMade,
-    result: job.returnvalue ?? null,
-    failedReason: job.failedReason ?? null,
-    createdAt: new Date(job.timestamp).toISOString(),
-    finishedAt: job.finishedOn ? new Date(job.finishedOn).toISOString() : null,
-  };
-}
-
 /** Dispatches validated jobs and inspects them. Workers run in a separate process. */
 export class QueueManager {
+  /** BullMQ handle for callers that program the queue directly (schedulers, teardown). See {@link QueueKitAdapter.queue}. */
   readonly queue: Queue<JobEnvelope, JsonValue>;
   readonly connection: ConnectionOptions;
   /** Dedicated bookkeeping connection for batch state (full Redis command surface). */
   readonly redis: Redis;
   readonly batches: BatchRegistry;
+  /**
+   * Queue transport (queuekit adapter). Package-internal seam: `JobWorker`
+   * creates its consumer through it. Not re-exported from the package root.
+   */
+  readonly transport: QueueKitAdapter;
 
   constructor(readonly options: QueueOptions) {
     this.connection = redisConnection(options.url);
-    this.queue = new Queue<JobEnvelope, JsonValue>(options.queue ?? 'default', {
+    // queuekit owns the enqueue transport and provider lifecycle; job
+    // contracts, scopes and batches stay framework-owned (see adapter docs).
+    this.transport = new QueueKitAdapter({
       connection: this.connection,
       prefix: options.prefix,
+      queue: options.queue ?? 'default',
     });
+    this.queue = this.transport.queue;
     this.redis = new Redis({ ...this.connection, maxRetriesPerRequest: null, lazyConnect: false } as RedisOptions);
     this.batches = new BatchRegistry(this.redis, options.prefix);
   }
@@ -200,7 +191,6 @@ export class QueueManager {
     context: ExecutionContext,
     options: DispatchOptions & { readonly batchId?: string },
   ): Promise<{ readonly id: string }> {
-    const jobId = options.jobId ?? definition.idempotencyKey?.(payload);
     const envelope: JobEnvelope = {
       v: definition.version,
       payload,
@@ -208,16 +198,16 @@ export class QueueManager {
       correlationId: context.correlationId,
       ...(options.batchId ? { batchId: options.batchId } : {}),
     };
-    const job = await this.queue.add(definition.name, envelope, {
-      ...(jobId ? { jobId } : {}),
-      ...(options.delayMs ? { delay: options.delayMs } : {}),
+    // Transport goes through queuekit; the idempotency key (when defined)
+    // becomes the BullMQ job id so duplicate dispatches collapse into one job.
+    return this.transport.enqueue(definition.name, envelope, {
+      jobId: options.jobId ?? definition.idempotencyKey?.(payload),
+      delayMs: options.delayMs,
       attempts: options.attempts ?? definition.attempts ?? 3,
-      backoff: { type: 'exponential', delay: definition.backoffMs ?? 1_000 },
-      removeOnComplete: { count: this.options.keepCompleted ?? 1_000 },
-      removeOnFail: { count: this.options.keepFailed ?? 5_000 },
+      backoffMs: definition.backoffMs ?? 1_000,
+      keepCompleted: this.options.keepCompleted ?? 1_000,
+      keepFailed: this.options.keepFailed ?? 5_000,
     });
-    if (!job.id) throw new FrameworkError('JOB_DISPATCH_FAILED', `Queue did not assign an id to "${definition.name}"`);
-    return { id: job.id };
   }
 
   async batchStatus(batchId: string): Promise<BatchStatus | null> {
@@ -247,51 +237,50 @@ export class QueueManager {
     const onComplete = await this.batches.takeOnComplete(batchId);
     if (!onComplete) return;
     const parsed = JSON.parse(onComplete) as BatchCompletionJob;
-    await this.queue.add(
+    await this.transport.enqueue(
       parsed.name,
       { v: parsed.version, payload: parsed.payload, actor: { id: null, type: 'system' }, correlationId: batchId },
       {
         jobId: `batch-${batchId}-complete`,
         attempts: parsed.attempts ?? 3,
-        backoff: { type: 'exponential', delay: 1_000 },
-        removeOnComplete: { count: this.options.keepCompleted ?? 1_000 },
-        removeOnFail: { count: this.options.keepFailed ?? 5_000 },
+        backoffMs: 1_000,
+        keepCompleted: this.options.keepCompleted ?? 1_000,
+        keepFailed: this.options.keepFailed ?? 5_000,
       },
     );
   }
 
   async status(id: string): Promise<JobStatus | null> {
-    const job = await this.queue.getJob(id);
-    return job ? toStatus(job) : null;
+    return this.transport.status(id);
   }
 
   async failed(limit = 50, offset = 0): Promise<JobStatus[]> {
-    const jobs = await this.queue.getFailed(offset, offset + limit - 1);
-    return (await Promise.all(jobs.map(toStatus))).filter((s): s is JobStatus => s !== null);
+    return this.transport.failed(limit, offset);
   }
 
   /** Re-queues a failed job; payload (and thus idempotency) is unchanged. */
   async retry(id: string): Promise<boolean> {
-    const job = await this.queue.getJob(id);
-    if (!job || (await job.getState()) !== 'failed') return false;
-    await job.retry('failed');
-    return true;
+    return this.transport.retry(id);
   }
 
   async counts(): Promise<Readonly<Record<string, number>>> {
-    return this.queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed');
+    return this.transport.counts();
   }
 
+  // Inspection/pause have no queuekit surface (see adapter docs); the
+  // transport's direct BullMQ handle serves them.
   pause(): Promise<void> {
-    return this.queue.pause();
+    return this.transport.pause();
   }
 
   resume(): Promise<void> {
-    return this.queue.resume();
+    return this.transport.resume();
   }
 
   async close(): Promise<void> {
-    await this.queue.close();
+    // Closes queuekit-owned resources (provider and its queue clients) and
+    // the framework's direct queue handle.
+    await this.transport.close();
     await this.redis.quit();
   }
 }

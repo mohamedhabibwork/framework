@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@framework/core": "workspace:*",
+    "@mohamedhabibwork/queuekit": "0.4.1",
     "bullmq": "6.3.11",
     "ioredis": "5.8.2",
     "zod": "4.6.5"
