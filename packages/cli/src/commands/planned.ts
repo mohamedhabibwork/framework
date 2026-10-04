@@ -44,10 +44,7 @@ const PLANNED: readonly [string, CommandGroup, string][] = [
   ['queue:prune', 'queue', 'Remove retained terminal jobs'],
   ['queue:pause', 'queue', 'Pause consumption'],
   ['queue:resume', 'queue', 'Resume consumption'],
-  ['cache:clear', 'cache', "Clear the application's cache namespace"],
   ['cache:prune', 'cache', 'Adapter-supported expiry cleanup'],
-  ['session:prune', 'cache', 'Remove expired sessions'],
-  ['storage:check', 'storage', 'Validate disk configuration'],
   ['storage:link', 'storage', 'Link a configured local public disk'],
   ['storage:prune', 'storage', 'Remove framework-owned temporary uploads'],
 ];

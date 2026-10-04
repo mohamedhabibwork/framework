@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GLOBAL_OPTIONS, parseArgs, splitCommand } from '../src/args';
+import { frameworkCommands } from '../src/commands';
 import { CliError, EXIT, type ExitCode } from '../src/errors';
 import { parseDefinitionFile, parseFieldSpec } from '../src/generators/crud/definition';
 import { parseJunit } from '../src/generators/crud/verify';
@@ -10,6 +11,8 @@ import { columnName, pluralize, resourceNames } from '../src/generators/naming';
 import { importPath, resolveInsideProject } from '../src/generators/paths';
 import { applyChanges, buildChanges } from '../src/generators/plan';
 import { addImport, insertAfterMarker } from '../src/generators/registration';
+import type { ProjectAdapter } from '../src/project';
+import { runCli } from '../src/run';
 
 const PLAYGROUND = join(import.meta.dir, '../../../apps/playground');
 
@@ -236,3 +239,287 @@ async function snapshot(root: string): Promise<string[]> {
   }
   return entries.sort();
 }
+
+// -- Infrastructure commands (cache:clear, storage:check, session:prune) --------
+
+interface Envelope {
+  command: string;
+  status: string;
+  data: unknown;
+  error?: { code: string; message: string };
+}
+
+describe('infrastructure command gating (process contract)', () => {
+  test('the three commands moved from planned to implemented in the catalog', async () => {
+    const list = await cli(['--json', 'list']);
+    expect(list.code).toBe(0);
+    const body = JSON.parse(list.stdout) as { data: { commands: { name: string; status: string }[] } };
+    for (const name of ['cache:clear', 'storage:check', 'session:prune']) {
+      expect(body.data.commands.find((c) => c.name === name)?.status).toBe('implemented');
+    }
+  });
+
+  test('missing providers exit 3 with actionable messages (--json)', async () => {
+    // Gating runs before --confirm/--dry-run are honored: without the provider
+    // there is no capability to preview either.
+    const cache = await cli(['--json', 'cache:clear', '--confirm']);
+    expect(cache.code).toBe(EXIT.UNSUPPORTED);
+    const cacheBody = JSON.parse(cache.stdout) as Envelope;
+    expect(cacheBody).toMatchObject({ status: 'error', error: { code: 'UNSUPPORTED_CAPABILITY' } });
+    expect(cacheBody.error?.message).toMatch(/cacheProvider/);
+    expect(cacheBody.error?.message).toMatch(/providers\.ts/);
+
+    const storage = await cli(['--json', 'storage:check']);
+    expect(storage.code).toBe(EXIT.UNSUPPORTED);
+    expect((JSON.parse(storage.stdout) as Envelope).error?.message).toMatch(/storageProvider/);
+
+    // The playground registers authProvider, so session:prune passes the
+    // provider gate and stops at the missing adapter hook (exit 3 as well).
+    const session = await cli(['--json', 'session:prune', '--dry-run']);
+    expect(session.code).toBe(EXIT.UNSUPPORTED);
+    const sessionBody = JSON.parse(session.stdout) as Envelope;
+    expect(sessionBody).toMatchObject({ status: 'error', error: { code: 'UNSUPPORTED_CAPABILITY' } });
+    expect(sessionBody.error?.message).toMatch(/session-store access/);
+  });
+});
+
+describe('infrastructure command execution (in process)', () => {
+  const WITH_CACHE = 'export const providers = [cacheProvider];\n';
+  const WITH_AUTH = 'export const providers = [authProvider];\n';
+  const WITH_STORAGE = 'export const providers = [storageProvider];\n';
+
+  let root: string;
+
+  const infrastructureProject = (overrides: Partial<ProjectAdapter>): ProjectAdapter => ({
+    name: 'fixture',
+    root,
+    frameworkVersion: '0.0.0',
+    apiPrefix: '/api/v1',
+    paths: {
+      modules: 'app/modules',
+      schemaDir: 'database/schema',
+      schemaIndex: 'database/schema/index.ts',
+      factories: 'database/factories',
+      migrations: 'database/migrations',
+      apiRoutes: 'routes/api.ts',
+      providers: 'providers.ts',
+      openapi: 'bootstrap/openapi.ts',
+      config: 'config/index.ts',
+      testSupport: 'tests/support.ts',
+    },
+    tools: {
+      typecheck: [],
+      test: [],
+      lint: [],
+      format: [],
+      drizzleKit: [],
+      dev: [],
+      serve: [],
+    },
+    loadConfig: async () => ({}),
+    databaseUrl: () => 'postgres://localhost/fixture',
+    routes: async () => [],
+    providers: () => [],
+    middleware: () => [],
+    openapi: () => ({ operations: [], build: () => ({}) }),
+    ...overrides,
+  });
+
+  async function runInfra(args: string[], project: ProjectAdapter): Promise<{ code: number; envelope: Envelope }> {
+    const chunks: string[] = [];
+    const code = await runCli({
+      argv: args,
+      project,
+      commands: frameworkCommands,
+      cliVersion: '0.0.0',
+      isTTY: false,
+      stdout: (text) => chunks.push(text),
+      stderr: () => {},
+    });
+    return { code, envelope: JSON.parse(chunks.join('\n')) as Envelope };
+  }
+
+  function cacheHandle(overrides: Partial<{ clear: () => Promise<number>; driver: string }>) {
+    const state = { closed: false, calls: 0 };
+    return {
+      state,
+      handle: {
+        driver: overrides.driver ?? 'memory',
+        clear: async () => {
+          state.calls++;
+          return overrides.clear ? overrides.clear() : 2;
+        },
+        close: async () => {
+          state.closed = true;
+        },
+      },
+    };
+  }
+
+  function sessionHandle(overrides: Partial<{ expired: number; removed: number }>) {
+    const state = { closed: false, pruned: false };
+    return {
+      state,
+      handle: {
+        countExpired: async () => overrides.expired ?? 3,
+        prune: async () => {
+          state.pruned = true;
+          return overrides.removed ?? 5;
+        },
+        close: async () => {
+          state.closed = true;
+        },
+      },
+    };
+  }
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'fw-infra-'));
+  });
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  test('cache:clear without --confirm is a usage error; --dry-run never opens the cache', async () => {
+    await Bun.write(join(root, 'providers.ts'), WITH_CACHE);
+    const refused = await runInfra(['--json', 'cache:clear'], infrastructureProject({}));
+    expect(refused.code).toBe(EXIT.USAGE);
+    expect(refused.envelope.error?.code).toBe('INVALID_USAGE');
+    expect(refused.envelope.error?.message).toMatch(/--confirm/);
+
+    const dry = await runInfra(['--json', 'cache:clear', '--dry-run'], infrastructureProject({}));
+    expect(dry.code).toBe(0);
+    expect(dry.envelope).toMatchObject({ status: 'ok', data: { dryRun: true, cleared: false } });
+  });
+
+  test('cache:clear --confirm clears through the adapter hook and closes it', async () => {
+    await Bun.write(join(root, 'providers.ts'), WITH_CACHE);
+    const { handle, state } = cacheHandle({});
+    const result = await runInfra(
+      ['--json', 'cache:clear', '--confirm'],
+      infrastructureProject({
+        cache: async () => handle,
+      }),
+    );
+    expect(result.code).toBe(0);
+    expect(result.envelope).toMatchObject({ status: 'ok', data: { cleared: true, driver: 'memory', entries: 2 } });
+    expect(state.calls).toBe(1);
+    expect(state.closed).toBe(true);
+  });
+
+  test('cache:clear surfaces catalogued cache failures with exit 1 (redis namespace clear)', async () => {
+    await Bun.write(join(root, 'providers.ts'), WITH_CACHE);
+    const { handle, state } = cacheHandle({
+      clear: () =>
+        Promise.reject(Object.assign(new Error('redis cannot clear'), { code: 'CACHE_UNSUPPORTED_OPERATION' })),
+    });
+    const result = await runInfra(
+      ['--json', 'cache:clear', '--confirm'],
+      infrastructureProject({
+        cache: async () => handle,
+      }),
+    );
+    expect(result.code).toBe(EXIT.FAILURE);
+    expect(result.envelope.error?.code).toBe('CACHE_UNSUPPORTED_OPERATION');
+    expect(result.envelope.error?.message).toMatch(/cannot clear/);
+    expect(state.closed).toBe(true);
+  });
+
+  test('cache:clear rejects unknown store names', async () => {
+    await Bun.write(join(root, 'providers.ts'), WITH_CACHE);
+    const result = await runInfra(
+      ['--json', 'cache:clear', '--confirm', '--store', 'other'],
+      infrastructureProject({}),
+    );
+    expect(result.code).toBe(EXIT.USAGE);
+    expect(result.envelope.error?.message).toMatch(/Unknown cache store "other"/);
+  });
+
+  test('session:prune gates on authProvider, then on the adapter sessions hook', async () => {
+    await Bun.write(join(root, 'providers.ts'), 'export const providers = [];\n');
+    const noAuth = await runInfra(['--json', 'session:prune', '--dry-run'], infrastructureProject({}));
+    expect(noAuth.code).toBe(EXIT.UNSUPPORTED);
+    expect(noAuth.envelope.error?.message).toMatch(/authProvider/);
+
+    await Bun.write(join(root, 'providers.ts'), WITH_AUTH);
+    const noHook = await runInfra(['--json', 'session:prune', '--dry-run'], infrastructureProject({}));
+    expect(noHook.code).toBe(EXIT.UNSUPPORTED);
+    expect(noHook.envelope.error?.message).toMatch(/session-store access/);
+  });
+
+  test('session:prune --dry-run counts via countExpired without pruning; --confirm prunes', async () => {
+    await Bun.write(join(root, 'providers.ts'), WITH_AUTH);
+    const { handle, state } = sessionHandle({});
+    const dry = await runInfra(
+      ['--json', 'session:prune', '--dry-run'],
+      infrastructureProject({
+        sessions: async () => handle,
+      }),
+    );
+    expect(dry.code).toBe(0);
+    expect(dry.envelope).toMatchObject({ status: 'ok', data: { dryRun: true, expired: 3, removed: 0 } });
+    expect(state.pruned).toBe(false);
+    expect(state.closed).toBe(true);
+
+    const confirmed = await runInfra(
+      ['--json', 'session:prune', '--confirm'],
+      infrastructureProject({
+        sessions: async () => handle,
+      }),
+    );
+    expect(confirmed.code).toBe(0);
+    expect(confirmed.envelope).toMatchObject({ status: 'ok', data: { dryRun: false, removed: 5 } });
+    expect(state.pruned).toBe(true);
+    expect(state.closed).toBe(true);
+
+    const refused = await runInfra(
+      ['--json', 'session:prune'],
+      infrastructureProject({ sessions: async () => handle }),
+    );
+    expect(refused.code).toBe(EXIT.USAGE);
+    expect(refused.envelope.error?.message).toMatch(/--confirm/);
+  });
+
+  test('storage:check validates disks read-only and reports per-disk rows', async () => {
+    await Bun.write(join(root, 'providers.ts'), WITH_STORAGE);
+    const config = {
+      storage: {
+        default: 'local',
+        disks: { local: { driver: 'local', root: 'storage/local', visibility: 'private' } },
+      },
+    };
+    const ok = await runInfra(['--json', 'storage:check'], infrastructureProject({ loadConfig: async () => config }));
+    expect(ok.code).toBe(0);
+    const disks = (ok.envelope.data as { default: string; valid: boolean; disks: { status: string }[] }).disks;
+    expect(ok.envelope.data).toMatchObject({ default: 'local', valid: true });
+    expect(disks).toHaveLength(1);
+    expect(disks[0]?.status).toBe('ok (root is created on first use)');
+
+    const brokenDefault = {
+      storage: { default: 'missing', disks: { local: { driver: 'local', root: 'x', visibility: 'private' } } },
+    };
+    const bad = await runInfra(
+      ['--json', 'storage:check'],
+      infrastructureProject({
+        loadConfig: async () => brokenDefault,
+      }),
+    );
+    expect(bad.code).toBe(EXIT.FAILURE);
+    expect(bad.envelope.error?.code).toBe('STORAGE_CHECK_FAILED');
+    expect(bad.envelope.error?.message).toMatch(/unknown disk "missing"/);
+  });
+
+  test('storage:check enforces publicBaseUrl on public disks (provider rule)', async () => {
+    await Bun.write(join(root, 'providers.ts'), WITH_STORAGE);
+    const config = {
+      storage: { default: 'pub', disks: { pub: { driver: 'local', root: 'pub', visibility: 'public' } } },
+    };
+    const result = await runInfra(
+      ['--json', 'storage:check'],
+      infrastructureProject({ loadConfig: async () => config }),
+    );
+    expect(result.code).toBe(EXIT.FAILURE);
+    expect(result.envelope.error?.message).toMatch(/publicBaseUrl/);
+  });
+});

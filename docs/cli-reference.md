@@ -161,6 +161,43 @@ explicit release step.
 
 Both require a reachable Redis (`config redis.url`).
 
+## Cache, storage and sessions
+
+Infrastructure commands run only when their provider is registered: the CLI
+reads the providers file (`bootstrap/providers.ts`) as text — the same check
+`make:crud --access authenticated` applies to `authProvider` — and exits with
+code 3 (`UNSUPPORTED_CAPABILITY`) when `cacheProvider`, `storageProvider` or
+`authProvider` is missing. Destructive operations additionally require
+`--confirm`; `--dry-run` writes nothing.
+
+| Command | Effect |
+|---|---|
+| `cache:clear [--store <name>] [--dry-run] [--confirm]` | Delete every cached entry in the application namespace |
+| `session:prune [--dry-run] [--confirm]` | Remove expired sessions; `--dry-run` only counts them |
+| `storage:check` | Validate disk configuration (read-only) |
+
+`cache:clear` requires `@framework/cache` with `createCacheProvider(...)`
+registered. `--store` only accepts the provider's single default namespace.
+Redis engines deliberately cannot clear a namespace, so execution fails with
+the catalogued `CACHE_UNSUPPORTED_OPERATION` error (exit 1) — delete known
+keys instead. The project adapter must also expose a `cache(config)` hook
+that opens the `CACHE` binding and returns `{ driver, clear, close }`;
+without it the command reports the missing capability.
+
+`session:prune` requires the auth module (`make:auth`) plus a
+`sessions(config)` adapter hook that opens `PgSessionStore` on the database
+connection. `--dry-run` uses `countExpired()` — a read that never deletes —
+while `--confirm` runs `prune()` and reports the number of rows removed.
+
+`storage:check` requires `@framework/storage` with `createStorageProvider(...)`
+registered. It prints one row per configured disk (driver, visibility, root,
+public base URL) and validates the provider's rules: `storage.default` must
+name an existing disk and public disks must declare `publicBaseUrl`. Local
+roots are probed read-only — they must exist and be writable, or be creatable
+from a writable ancestor; kit-backed cloud drivers get only their
+framework-owned fields validated (the `options` bag is storagekit's contract).
+With `--json` the per-disk rows come back as `{ disks: [...] }`.
+
 ## Workflows
 
 | Command | Effect |
@@ -202,9 +239,9 @@ re-implements compilers or formatters.
 ## Planned commands
 
 The remaining specification catalog (`make:controller`, `make:service`,
-`make:policy`, `db:seed`, `db:rollback`, `queue:retry`, `cache:*`,
-`storage:*`, `build`, `integration:*`, …) is listed by `list`
-with status `planned` and exits with code 3 when invoked. See
+`make:policy`, `db:seed`, `db:rollback`, `queue:retry`, `cache:prune`,
+`storage:link`, `storage:prune`, `build`, `integration:*`, …) is listed by
+`list` with status `planned` and exits with code 3 when invoked. See
 [status.md](status.md) for the delivery phases that introduce them.
 Deferred auth scope (password recovery, email verification, OTP, JWT/JWK
 guards) stays planned until required.

@@ -3,6 +3,7 @@ import { authCommands } from './auth';
 import { createCommands } from './create';
 import { databaseCommands } from './database';
 import { generatorCommands } from './generators';
+import { infrastructureCommands } from './infrastructure';
 import { openapiCommands } from './openapi';
 import { plannedCommands } from './planned';
 import { projectCommands } from './project';
@@ -18,6 +19,7 @@ export const frameworkCommands: readonly Command[] = [
   ...generatorCommands,
   ...databaseCommands,
   ...queueCommands,
+  ...infrastructureCommands,
   ...workflowCommands,
   ...schedulerCommands,
   ...openapiCommands,
