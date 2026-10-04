@@ -1,5 +1,5 @@
-import type { Redis } from 'ioredis';
 import type { JsonObject } from '@framework/core';
+import type { Redis } from 'ioredis';
 
 /** Lifecycle of a dispatch batch, tracked in Redis bookkeeping hashes. */
 export type BatchState = 'running' | 'completed' | 'partially-failed' | 'cancelled';

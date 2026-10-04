@@ -2,8 +2,8 @@
 // Convention: every interface/type lives in `./types`, every constant in
 // `./constants`; runtime values (classes, functions) stay in their modules.
 
-export { DEFAULT_TIMEOUT_MS, QUEUE } from './constants';
 export { BatchRegistry, batchFailedKey, batchKey } from './batch';
+export { DEFAULT_TIMEOUT_MS, QUEUE } from './constants';
 export { defineJob, erase } from './job';
 export { DEFAULT_BATCH_TTL_SECONDS, jobStatusSchema, QueueManager } from './manager';
 

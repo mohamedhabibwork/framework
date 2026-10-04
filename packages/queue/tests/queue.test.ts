@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { Application, type ExecutionContext as Ctx, EXECUTION_CONTEXT, ExecutionContext } from '@framework/core';
 import { z } from 'zod/v4';
-import { defineJob, type BatchStatus, type JobStatus, JobWorker, QueueManager } from '../src';
+import { type BatchStatus, defineJob, type JobStatus, JobWorker, QueueManager } from '../src';
 
 const redisUrl = process.env.REDIS_URL;
 if (!redisUrl) throw new Error('REDIS_URL is not set; run `bun run db:up` and see .env.test.example');
@@ -83,7 +83,8 @@ const summarize = defineJob({
     return payload;
   },
 });
-const summaries: { batchId: string; total: number }[] = [];const prefix = `test-${crypto.randomUUID()}`;
+const summaries: { batchId: string; total: number }[] = [];
+const prefix = `test-${crypto.randomUUID()}`;
 const manager = new QueueManager({ url: redisUrl, prefix, queue: 'tests' });
 const application = new Application({ config: {}, providers: [] });
 let worker: JobWorker;
@@ -186,11 +187,7 @@ describe('Queue batches (BullMQ on real Redis)', () => {
   });
 
   test('tracks partial failure and lists the failed jobs', async () => {
-    const { batchId, jobIds } = await manager.dispatchBatch(
-      broken,
-      [{}, {}],
-      context,
-    );
+    const { batchId, jobIds } = await manager.dispatchBatch(broken, [{}, {}], context);
     const batch = await settleBatch(batchId);
     expect(batch).toMatchObject({ state: 'partially-failed', total: 2, failed: 2 });
     const failures = await manager.batchFailures(batchId);
@@ -198,10 +195,11 @@ describe('Queue batches (BullMQ on real Redis)', () => {
   });
 
   test('retried jobs only count once toward the batch', async () => {
-    const { batchId } = await manager.dispatchBatch(flakyBatchEntry, [
-      { failOnce: true },
-      { failOnce: false },
-    ], context);
+    const { batchId } = await manager.dispatchBatch(
+      flakyBatchEntry,
+      [{ failOnce: true }, { failOnce: false }],
+      context,
+    );
     const batch = await settleBatch(batchId);
     expect(batch).toMatchObject({ state: 'completed', total: 2, completed: 2, failed: 0 });
   });
@@ -217,8 +215,6 @@ describe('Queue batches (BullMQ on real Redis)', () => {
   test('duplicate batch ids are rejected', async () => {
     const batchId = `dup-${crypto.randomUUID()}`;
     await manager.dispatchBatch(double, [{ value: 1 }], context, { batchId });
-    await expect(manager.dispatchBatch(double, [{ value: 2 }], context, { batchId })).rejects.toThrow(
-      /already exists/,
-    );
+    await expect(manager.dispatchBatch(double, [{ value: 2 }], context, { batchId })).rejects.toThrow(/already exists/);
   });
 });

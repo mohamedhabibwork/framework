@@ -1,9 +1,9 @@
-import { type ExecutionContext, FrameworkError, type JsonObject, type JsonValue, token } from '@framework/core';
 import { randomUUID } from 'node:crypto';
+import { type ExecutionContext, FrameworkError, type JsonObject, type JsonValue, token } from '@framework/core';
 import { type ConnectionOptions, type Job, Queue } from 'bullmq';
 import Redis, { type RedisOptions } from 'ioredis';
 import { z } from 'zod/v4';
-import { BatchRegistry, type BatchCompletionJob, type BatchRecord, type BatchState } from './batch';
+import { type BatchCompletionJob, type BatchRecord, BatchRegistry, type BatchState } from './batch';
 import type { JobDefinition, JobEnvelope } from './job';
 
 export type JobState = 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'paused';
