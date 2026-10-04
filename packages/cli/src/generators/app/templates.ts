@@ -1,0 +1,912 @@
+import type { NewFile } from '../plan';
+
+export interface AppTemplateInput {
+  /** Kebab-case application name (the target directory's basename). */
+  readonly name: string;
+  readonly className: string;
+  readonly apiTitle: string;
+}
+
+const TSCONFIG_COMPILER_OPTIONS = `{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["bun"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx"
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "dist", "storage"]
+}`;
+
+/**
+ * The complete generated application: the same structure as the framework's
+ * playground, minus the sample module (added by `make:crud`), plus events,
+ * queue worker and audit wiring.
+ */
+export function appTemplateFiles(input: AppTemplateInput): readonly NewFile[] {
+  return [
+    { path: 'package.json', content: packageJson(input) },
+    { path: 'tsconfig.json', content: `${TSCONFIG_COMPILER_OPTIONS}\n` },
+    { path: 'biome.json', content: biomeJson() },
+    { path: '.env.example', content: envExample(input) },
+    { path: '.gitignore', content: gitignore() },
+    { path: 'README.md', content: readme(input) },
+    { path: 'drizzle.config.ts', content: drizzleConfig() },
+    { path: 'config/index.ts', content: config(input) },
+    { path: 'bootstrap/app.ts', content: bootstrapApp(input) },
+    { path: 'bootstrap/http.ts', content: bootstrapHttp(input) },
+    { path: 'bootstrap/middleware.ts', content: bootstrapMiddleware() },
+    { path: 'bootstrap/openapi.ts', content: bootstrapOpenapi(input) },
+    { path: 'bootstrap/providers.ts', content: bootstrapProviders() },
+    { path: 'app/providers/database.provider.ts', content: databaseProvider() },
+    { path: 'app/providers/events.provider.ts', content: eventsProvider() },
+    { path: 'app/providers/data.tokens.ts', content: dataTokens() },
+    { path: 'app/providers/data.provider.ts', content: dataProvider() },
+    { path: 'app/jobs/index.ts', content: jobsRegistry() },
+    { path: 'routes/api.ts', content: apiRoutes() },
+    { path: 'routes/data.ts', content: dataRoutes() },
+    { path: 'routes/health.ts', content: healthRoutes() },
+    { path: 'database/schema/index.ts', content: schemaIndex() },
+    { path: 'bin/server.ts', content: server() },
+    { path: 'bin/worker.ts', content: worker() },
+    { path: 'bin/cli.ts', content: cli(input) },
+    { path: 'tests/support.ts', content: testSupport(input) },
+    { path: 'tests/health.api.test.ts', content: healthTest() },
+    { path: 'deployment/compose.yaml', content: compose(input) },
+  ];
+}
+
+function packageJson({ name }: AppTemplateInput): string {
+  return `{
+  "name": "${name}",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot bin/server.ts",
+    "start": "bun run bin/server.ts",
+    "cli": "bun run bin/cli.ts",
+    "worker": "bun run bin/worker.ts",
+    "db:generate": "drizzle-kit generate",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@framework/cli": "workspace:*",
+    "@framework/core": "workspace:*",
+    "@framework/crud": "workspace:*",
+    "@framework/database": "workspace:*",
+    "@framework/events": "workspace:*",
+    "@framework/http": "workspace:*",
+    "@framework/openapi": "workspace:*",
+    "@framework/queue": "workspace:*",
+    "@framework/support": "workspace:*",
+    "@framework/validation": "workspace:*",
+    "drizzle-orm": "0.45.3",
+    "hono": "4.13.12",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@framework/testing": "workspace:*",
+    "drizzle-kit": "0.31.11",
+    "typescript": "5.9.3"
+  }
+}
+`;
+}
+
+function biomeJson(): string {
+  return `{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": { "enabled": false },
+  "files": { "includes": ["**", "!**/node_modules", "!**/dist", "!**/database/migrations/meta"] },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
+  "javascript": { "formatter": { "quoteStyle": "single", "trailingCommas": "all", "semicolons": "always" } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": { "noExplicitAny": "error", "noConsole": { "level": "warn", "options": { "allow": ["error"] } } },
+      "style": { "noNonNullAssertion": "error", "useImportType": "error" }
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } }
+}
+`;
+}
+
+function envExample({ name }: AppTemplateInput): string {
+  return `# Placeholders only. Copy to .env and replace values; never commit real credentials.
+APP_NAME=${name}
+APP_ENV=development
+APP_DEBUG=false
+
+HTTP_HOST=127.0.0.1
+HTTP_PORT=3000
+CORS_ORIGINS=
+HTTP_MAX_BODY_BYTES=1048576
+SHUTDOWN_TIMEOUT_MS=10000
+
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/${name.replaceAll('-', '_')}
+DATABASE_MAX_CONNECTIONS=10
+
+# Redis backs queues and (optionally) cross-instance events.
+REDIS_URL=redis://127.0.0.1:6379
+QUEUE_NAME=default
+QUEUE_CONCURRENCY=4
+QUEUE_PREFIX=${name}
+EVENTS_DRIVER=memory
+`;
+}
+
+function gitignore(): string {
+  return `node_modules/
+dist/
+coverage/
+storage/
+.env
+.env.*
+!.env.example
+*.log
+.tmp/
+`;
+}
+
+function readme({ className }: AppTemplateInput): string {
+  return `# ${className}
+
+Generated application on the framework workspace (Bun + Hono + Drizzle + Zod).
+
+## Getting started
+
+\`\`\`sh
+bun install
+cp .env.example .env          # then edit the values
+docker compose -f deployment/compose.yaml up -d --wait   # PostgreSQL + Redis
+
+bun run cli -- config:check
+bun run cli -- db:migrate     # apply the generated migration(s)
+bun run dev                   # HTTP server (bun run cli -- serve for production)
+bun run worker                # queue worker (bun run cli -- queue:work)
+bun test                      # endpoint suite on an isolated database
+\`\`\`
+
+If this app was created with \`--with-demo\`, a sample **products** module is
+already generated (schema, migration, CRUD routes, OpenAPI, tests). Add more
+resources any time:
+
+\`\`\`sh
+bun run cli -- make:crud Order --module orders \\\\
+  --fields 'total:numeric:required' --access public --verify
+\`\`\`
+
+## Layout
+
+- \`app/modules/<feature>/\` — business modules (generate with \`make:crud\`)
+- \`app/providers/\` — application providers (database, events)
+- \`bootstrap/\` — framework application, HTTP composition, middleware, OpenAPI
+- \`config/\` — validated configuration (environment-mapped)
+- \`database/schema\` — canonical Drizzle tables (including \`audit_logs\`)
+- \`bin/\` — server, worker and CLI entry points
+- \`tests/\` — endpoint tests (\`bun test\`)
+
+Events: set \`EVENTS_DRIVER=redis\` to fan out \`entity.*\` / \`import.*\` /
+\`export.*\` events across instances; \`GET /ws\` multiplexes them to WebSocket
+clients (subscribe to allowlisted channels such as \`events\`).
+`;
+}
+
+function drizzleConfig(): string {
+  return `import { defineConfig } from 'drizzle-kit';
+
+// \`drizzle-kit generate\` diffs the schema offline; no database connection is needed.
+// Migrations are applied by \`bun run cli -- db:migrate\` (locked, explicit release step).
+export default defineConfig({
+  dialect: 'postgresql',
+  schema: './database/schema/index.ts',
+  out: './database/migrations',
+  strict: true,
+  verbose: true,
+});
+`;
+}
+
+function config({ name }: AppTemplateInput): string {
+  return `import { type DeepReadonly, loadConfig } from '@framework/core';
+import { z } from 'zod/v4';
+
+const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
+
+export const configSchema = z.object({
+  app: z.object({
+    name: z.string().min(1).default('${name}'),
+    env: z.enum(['development', 'test', 'production']).default('development'),
+    debug: booleanString.default(false),
+  }),
+  http: z.object({
+    host: z.string().min(1).default('127.0.0.1'),
+    port: z.coerce.number().int().min(0).max(65535).default(3000),
+    corsOrigins: z
+      .string()
+      .default('')
+      .transform((value) =>
+        value
+          .split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean),
+      ),
+    maxBodyBytes: z.coerce.number().int().min(1).default(1024 * 1024),
+    shutdownTimeoutMs: z.coerce.number().int().min(100).default(10_000),
+  }),
+  database: z.object({
+    url: z.url({ protocol: /^postgres(ql)?$/ }),
+    maxConnections: z.coerce.number().int().min(1).max(100).default(10),
+    migrationsFolder: z.string().default('database/migrations'),
+  }),
+  redis: z.object({
+    url: z.url({ protocol: /^redis$/ }).default('redis://127.0.0.1:6379'),
+  }),
+  queue: z.object({
+    name: z.string().min(1).default('default'),
+    concurrency: z.coerce.number().int().min(1).max(64).default(4),
+    prefix: z.string().min(1).default('${name}'),
+  }),
+  events: z.object({
+    driver: z.enum(['memory', 'redis']).default('memory'),
+  }),
+  // @framework:config-schema-sections
+});
+
+export type AppConfig = DeepReadonly<z.output<typeof configSchema>>;
+
+/** Maps environment variables onto the config schema. Precedence: process env > env file > defaults. */
+export const mapEnvironment = (env: Readonly<Record<string, string>>): z.input<typeof configSchema> => ({
+  app: { name: env.APP_NAME, env: env.APP_ENV as never, debug: env.APP_DEBUG as never },
+  http: {
+    host: env.HTTP_HOST,
+    port: env.HTTP_PORT,
+    corsOrigins: env.CORS_ORIGINS,
+    maxBodyBytes: env.HTTP_MAX_BODY_BYTES,
+    shutdownTimeoutMs: env.SHUTDOWN_TIMEOUT_MS,
+  },
+  database: {
+    url: env.DATABASE_URL as string,
+    maxConnections: env.DATABASE_MAX_CONNECTIONS,
+    migrationsFolder: env.DATABASE_MIGRATIONS_FOLDER,
+  },
+  redis: { url: env.REDIS_URL },
+  queue: { name: env.QUEUE_NAME, concurrency: env.QUEUE_CONCURRENCY, prefix: env.QUEUE_PREFIX },
+  events: { driver: env.EVENTS_DRIVER as never },
+  // @framework:config-env-sections
+});
+
+export function loadAppConfig(options: { envFile?: string; processEnv?: Record<string, string | undefined> } = {}) {
+  return loadConfig({ schema: configSchema, map: mapEnvironment, envFile: options.envFile ?? '.env', ...options });
+}
+`;
+}
+
+function bootstrapApp({ className }: AppTemplateInput): string {
+  return `import { Application } from '@framework/core';
+import type { AppConfig } from '../config';
+import { providers } from './providers';
+
+export type ${className}Application = Application<AppConfig>;
+
+/** Builds the framework application. Callers boot it and own its shutdown. */
+export function createApplication(config: AppConfig): ${className}Application {
+  return new Application<AppConfig>({ config, providers });
+}
+`;
+}
+
+function bootstrapHttp({ className }: AppTemplateInput): string {
+  return `import { auditRoutes } from '@framework/crud';
+import { AUDIT_READER, AuditReader } from '@framework/database';
+import { assertNoDuplicateRoutes, createHttpKernel, forbidden, type FrameworkEnv, resolve } from '@framework/http';
+import { cors } from 'hono/cors';
+import type { Context } from 'hono';
+import { apiRoutes } from '../routes/api';
+import { healthRoutes } from '../routes/health';
+import { WEBSOCKET_GATEWAY } from '../app/providers/events.provider';
+import type { ${className}Application } from './app';
+import { middleware } from './middleware';
+
+/**
+ * Composes the typed Hono application. Order:
+ * request id -> body limit -> request scope (kernel) -> secure headers ->
+ * CORS (API only, before auth so preflight succeeds) -> module routes.
+ *
+ * Audit endpoints (\`/audit\`) read the framework-owned audit trail; they are
+ * denied in production until an identity/authorization layer exists. The
+ * \`/ws\` gateway opens private \`user.<id>\` channels for authenticated
+ * actors and broadcasts presence.
+ */
+export function createHttp(application: ${className}Application) {
+  const { config } = application;
+  const http = createHttpKernel(application, {
+    exposeInternalErrors: config.app.debug && config.app.env !== 'production',
+    maxBodyBytes: config.http.maxBodyBytes,
+    report: (error, context) => console.error('[http] unhandled error', context, error),
+  })
+    .use(...middleware.resolve(['api']))
+    .use('/api/*', cors({ origin: [...config.http.corsOrigins] }))
+    .route('/health', healthRoutes)
+    .route('/api/v1', apiRoutes)
+    .route(
+      '/audit',
+      auditRoutes({
+        authorize: (c: Context<FrameworkEnv>) => {
+          if (config.app.env === 'production') throw forbidden('Audit endpoints require authorization');
+        },
+        reader: (c: Context<FrameworkEnv>) => resolve(c, AUDIT_READER),
+      }),
+    )
+    .route(
+      '/ws',
+      application.container.resolve(WEBSOCKET_GATEWAY).routes(),
+    );
+
+  assertNoDuplicateRoutes(http);
+  return http;
+}
+
+/** Route types for Hono RPC clients (\`hc<AppType>()\`). */
+export type AppType = ReturnType<typeof createHttp>;
+`;
+}
+
+function bootstrapMiddleware(): string {
+  return `import { MiddlewareRegistry } from '@framework/http';
+import { secureHeaders } from 'hono/secure-headers';
+
+/**
+ * Optional named aliases and groups. Resolved and validated at bootstrap so
+ * unknown names fail before any request is served. Native \`hono/*\`
+ * middleware can always be registered directly instead.
+ */
+export const middleware = new MiddlewareRegistry()
+  .alias('secure-headers', secureHeaders())
+  .group('api', ['secure-headers']);
+
+middleware.validate();
+`;
+}
+
+function bootstrapOpenapi({ apiTitle }: AppTemplateInput): string {
+  return `import { dataOperations } from '@framework/crud';
+import { generateOpenApiDocument, type Operation } from '@framework/openapi';
+
+/** Documented API operations. Generators append module operation lists below the marker. */
+export const operations: readonly Operation[] = [
+  // @framework:openapi-operations
+  ...dataOperations({ mount: '/api/v1/data' }),
+];
+
+/** Session auth is a cookie; API clients authenticate with Bearer tokens. */
+const securitySchemes = {
+  sessionCookie: { type: 'apiKey', in: 'cookie', name: 'fw_session' },
+  bearerAuth: { type: 'http', scheme: 'bearer' },
+} as const;
+
+export function buildOpenApiDocument(version = '1.0.0') {
+  return generateOpenApiDocument({ title: '${apiTitle}', version, operations, securitySchemes });
+}
+`;
+}
+
+function bootstrapProviders(): string {
+  return `import type { ServiceProvider } from '@framework/core';
+import { dataProvider } from '../app/providers/data.provider';
+import { databaseProvider } from '../app/providers/database.provider';
+import { eventsProvider } from '../app/providers/events.provider';
+import type { AppConfig } from '../config';
+
+/** Explicit provider registration. Order is resolved from \`dependsOn\`. */
+export const providers: readonly ServiceProvider<AppConfig>[] = [
+  databaseProvider,
+  eventsProvider,
+  dataProvider,
+  // @framework:providers
+];
+`;
+}
+
+function databaseProvider(): string {
+  return `import { defineProvider, EXECUTION_CONTEXT } from '@framework/core';
+import {
+  AUDIT_READER,
+  AuditReader,
+  createConnection,
+  DATA_CONTEXT,
+  DATABASE,
+  TRANSACTION_CONTEXT,
+  TransactionContext,
+} from '@framework/database';
+import type { AppConfig } from '../../config';
+
+/**
+ * Pooled PostgreSQL connection (singleton, closed on shutdown) and per-scope
+ * data access: a transaction context plus the execution context (actor,
+ * correlation id) repositories use for auditing. The audit reader serves the
+ * \`/audit\` endpoints.
+ */
+export const databaseProvider = defineProvider<AppConfig>({
+  name: 'database',
+  register({ container, config }) {
+    container.singleton(
+      DATABASE,
+      () =>
+        createConnection({
+          url: config.database.url,
+          maxConnections: config.database.maxConnections,
+          applicationName: config.app.name,
+        }),
+      (connection) => connection.close(),
+    );
+    container.scoped(TRANSACTION_CONTEXT, (r) => new TransactionContext(r.resolve(DATABASE).db));
+    container.scoped(DATA_CONTEXT, (r) => ({
+      transactions: r.resolve(TRANSACTION_CONTEXT),
+      execution: r.resolve(EXECUTION_CONTEXT),
+    }));
+    container.scoped(AUDIT_READER, (r) => new AuditReader(r.resolve(TRANSACTION_CONTEXT).executor));
+  },
+});
+`;
+}
+
+function dataTokens(): string {
+  return `import { token } from '@framework/core';
+import type { DataPorter, ExportStore } from '@framework/crud';
+
+/** Shared export artifact store (local disk under storage/exports). */
+export const EXPORT_STORE = token<ExportStore>('data.export-store');
+
+/** Queued import/export dispatcher for the resources that opt in. */
+export const DATA_PORTER = token<DataPorter>('data.porter');
+`;
+}
+
+function dataProvider(): string {
+  return `import { DataPorter, LocalExportStore } from '@framework/crud';
+import { defineProvider } from '@framework/core';
+import { QUEUE, QueueManager } from '@framework/queue';
+import type { AppConfig } from '../../config';
+import { DATA_PORTER, EXPORT_STORE } from './data.tokens';
+
+/**
+ * Queued import/export: a BullMQ connection (lazy — connects on first use),
+ * the local export artifact store, and the dispatcher behind \`/api/v1/data\`.
+ * To opt a module in: define its import/export jobs with \`defineImportJob\`
+ * /\`defineExportJob\` (pass \`storeToken: EXPORT_STORE\`), list them below,
+ * and add the resource name to \`dataOperations\` in \`bootstrap/openapi.ts\`.
+ */
+export const dataProvider = defineProvider<AppConfig>({
+  name: 'data',
+  register({ container, config }) {
+    container.singleton(
+      QUEUE,
+      () =>
+        new QueueManager({
+          url: config.redis.url,
+          prefix: config.queue.prefix,
+          queue: config.queue.name,
+        }),
+      (queue) => queue.close(),
+    );
+    container.singleton(EXPORT_STORE, () => new LocalExportStore('storage/exports'));
+    container.scoped(
+      DATA_PORTER,
+      (r) =>
+        new DataPorter({
+          queue: r.resolve(QUEUE),
+          store: r.resolve(EXPORT_STORE),
+          imports: [],
+          exports: [],
+        }),
+    );
+  },
+});
+`;
+}
+
+function eventsProvider(): string {
+  return `import { defineProvider, token } from '@framework/core';
+import { EVENT_BUS, MemoryEventBus, RedisEventBus, WebsocketGateway } from '@framework/events';
+import { resolve } from '@framework/http';
+import { EXECUTION_CONTEXT } from '@framework/core';
+import type { AppConfig } from '../../config';
+
+export const WEBSOCKET_GATEWAY = token<WebsocketGateway>('events.websocket-gateway');
+
+/**
+ * In-process events by default; Redis pub/sub for cross-instance fan-out
+ * (config \`events.driver\`). The WebSocket gateway serves \`/ws\`: private
+ * \`user.<id>\` channels for authenticated actors and presence broadcasts.
+ */
+export const eventsProvider = defineProvider<AppConfig>({
+  name: 'events',
+  register({ container, config }) {
+    container.singleton(
+      EVENT_BUS,
+      () =>
+        config.events.driver === 'redis'
+          ? new RedisEventBus({ url: config.redis.url, prefix: config.app.name })
+          : new MemoryEventBus(),
+      (bus) => bus.close(),
+    );
+    container.singleton(
+      WEBSOCKET_GATEWAY,
+      (r) =>
+        new WebsocketGateway({
+          bus: r.resolve(EVENT_BUS),
+          authenticate: (c) => resolve(c, EXECUTION_CONTEXT).actor,
+          channels: ['events'],
+          presence: true,
+        }),
+      (gateway) => gateway.close(),
+    );
+  },
+});
+`;
+}
+
+function jobsRegistry(): string {
+  return `import type { JobList } from '@framework/queue';
+
+/**
+ * The application's job handlers, run by \`bun run worker\`
+ * (or \`bun run cli -- queue:work\`). Each job declares a versioned, validated
+ * payload and an idempotent handler; add jobs with \`defineJob\`.
+ */
+export const jobs: JobList = [];
+`;
+}
+
+function apiRoutes(): string {
+  return `import type { FrameworkEnv } from '@framework/http';
+import { Hono } from 'hono';
+import { dataRoutes } from './data';
+
+/** Versioned API composed from module routes; mounted at /api/v1. */
+export const apiRoutes = new Hono<FrameworkEnv>()
+  // @framework:routes
+  .route('/data', dataRoutes);
+`;
+}
+
+function dataRoutes(): string {
+  return `import { importExportRoutes } from '@framework/crud';
+import { EXECUTION_CONTEXT } from '@framework/core';
+import { resolve } from '@framework/http';
+import { DATA_PORTER } from '../app/providers/data.tokens';
+
+/**
+ * Queued import/export endpoints (documented via \`dataOperations\` in
+ * \`bootstrap/openapi.ts\`):
+ *
+ * \`\`\`text
+ * POST /api/v1/data/import                 dispatch an import (CSV/JSON)
+ * GET  /api/v1/data/import/status/:jobId   job state and row errors
+ * POST /api/v1/data/export                 dispatch an export
+ * GET  /api/v1/data/export/status/:jobId   job state and progress
+ * GET  /api/v1/data/export/download/:jobId the finished artifact
+ * \`\`\`
+ */
+export const dataRoutes = importExportRoutes({
+  porter: (c) => resolve(c, DATA_PORTER),
+  execution: (c) => resolve(c, EXECUTION_CONTEXT),
+});
+`;
+}
+
+function healthRoutes(): string {
+  return `import { DATABASE, pingDatabase } from '@framework/database';
+import { type FrameworkEnv, resolve } from '@framework/http';
+import { Hono } from 'hono';
+
+/** Liveness never touches dependencies; readiness checks the database. */
+export const healthRoutes = new Hono<FrameworkEnv>()
+  .get('/live', (c) => c.json({ status: 'ok' as const }))
+  .get('/ready', async (c) => {
+    const database = await pingDatabase(resolve(c, DATABASE));
+    return database
+      ? c.json({ status: 'ready' as const, checks: { database: 'ok' as const } }, 200)
+      : c.json({ status: 'unavailable' as const, checks: { database: 'failed' as const } }, 503);
+  });
+`;
+}
+
+function schemaIndex(): string {
+  return `import { auditLogs } from '@framework/database';
+
+// Canonical Drizzle schema exports. Generators append below the marker.
+// @framework:schema-exports
+export { auditLogs };
+`;
+}
+
+function server(): string {
+  return `import { installGracefulShutdown, redact } from '@framework/core';
+import { websocket } from '@framework/events';
+import { createApplication } from '../bootstrap/app';
+import { createHttp } from '../bootstrap/http';
+import { loadAppConfig } from '../config';
+
+const config = await loadAppConfig();
+const application = await createApplication(config).boot();
+const http = createHttp(application);
+
+const server = Bun.serve({ hostname: config.http.host, port: config.http.port, fetch: http.fetch, websocket });
+console.error(\`[server] listening on http://\${server.hostname}:\${server.port}\`, redact({ app: config.app }));
+
+installGracefulShutdown({
+  timeoutMs: config.http.shutdownTimeoutMs,
+  onShutdown: async () => {
+    await server.stop();
+    await application.shutdown();
+  },
+});
+`;
+}
+
+function worker(): string {
+  return `import { installGracefulShutdown } from '@framework/core';
+import { JobWorker, QueueManager } from '@framework/queue';
+import { createApplication } from '../bootstrap/app';
+import { loadAppConfig } from '../config';
+import { jobs } from '../app/jobs';
+
+const config = await loadAppConfig();
+const application = await createApplication(config).boot();
+
+const queue = new QueueManager({ url: config.redis.url, prefix: config.queue.prefix, queue: config.queue.name });
+const worker = new JobWorker(queue, application, jobs, {
+  concurrency: config.queue.concurrency,
+  onFailed: (job, error) => console.error(\`[worker] job \${job.name} (\${job.id ?? '?'}) failed\`, error),
+});
+worker.start();
+console.error(\`[worker] consuming queue "\${config.queue.name}" (concurrency \${config.queue.concurrency})\`);
+
+installGracefulShutdown({
+  timeoutMs: config.http.shutdownTimeoutMs,
+  onShutdown: async () => {
+    await worker.close();
+    await queue.close();
+    await application.shutdown();
+  },
+});
+`;
+}
+
+function cli({ name }: AppTemplateInput): string {
+  return `import { join } from 'node:path';
+import { defineProject, frameworkCommands, runCli } from '@framework/cli';
+import { listRoutes } from '@framework/http';
+import { createApplication } from '../bootstrap/app';
+import { createHttp } from '../bootstrap/http';
+import { middleware } from '../bootstrap/middleware';
+import { buildOpenApiDocument, operations } from '../bootstrap/openapi';
+import { providers } from '../bootstrap/providers';
+import { type AppConfig, loadAppConfig } from '../config';
+
+const root = join(import.meta.dir, '..');
+
+/** Application-local CLI: the project root comes from this file, never from the shell's cwd. */
+const project = defineProject({
+  name: '${name}',
+  root,
+  frameworkVersion: '0.1.0',
+  apiPrefix: '/api/v1',
+  paths: {
+    modules: 'app/modules',
+    schemaDir: 'database/schema',
+    schemaIndex: 'database/schema/index.ts',
+    factories: 'database/factories',
+    migrations: 'database/migrations',
+    apiRoutes: 'routes/api.ts',
+    providers: 'bootstrap/providers.ts',
+    openapi: 'bootstrap/openapi.ts',
+    config: 'config/index.ts',
+    testSupport: 'tests/support.ts',
+  },
+  tools: {
+    typecheck: ['bunx', 'tsc', '-p', 'tsconfig.json'],
+    test: ['bun', 'test'],
+    lint: ['bunx', 'biome', 'check', '.'],
+    format: ['bunx', 'biome', 'format', '.'],
+    drizzleKit: ['bunx', 'drizzle-kit'],
+    dev: ['bun', 'run', '--hot', 'bin/server.ts'],
+    serve: ['bun', 'run', 'bin/server.ts'],
+    worker: ['bun', 'run', 'bin/worker.ts'],
+  },
+  loadConfig: (envFile) => loadAppConfig({ envFile: envFile ?? join(root, '.env') }),
+  databaseUrl: (config) => (config as AppConfig).database.url,
+  queueUrl: (config) => ({
+    url: (config as AppConfig).redis.url,
+    prefix: (config as AppConfig).queue.prefix,
+    queue: (config as AppConfig).queue.name,
+  }),
+  routes: async (config) => {
+    // Booting only registers bindings (nothing connects); it makes the
+    // listed route table match what the server actually serves.
+    const booted = await createApplication(config as AppConfig).boot();
+    try {
+      return listRoutes(createHttp(booted));
+    } finally {
+      await booted.shutdown();
+    }
+  },
+  providers: () => providers.map((provider) => provider.name),
+  middleware: () => middleware.describe(),
+  openapi: () => ({ operations, build: buildOpenApiDocument }),
+});
+
+process.exitCode = await runCli({
+  argv: process.argv.slice(2),
+  project,
+  commands: frameworkCommands,
+  cliVersion: '0.1.0',
+});
+`;
+}
+
+function testSupport({ className }: AppTemplateInput): string {
+  return `import { join } from 'node:path';
+import { parseConfig } from '@framework/core';
+import {
+  createTestDatabase,
+  type JsonRequester,
+  requireTestDatabaseUrl,
+  serveOnEphemeralPort,
+} from '@framework/testing';
+import { createApplication, type ${className}Application } from '../bootstrap/app';
+import { createHttp } from '../bootstrap/http';
+import { configSchema, mapEnvironment } from '../config';
+
+const APP_ROOT = join(import.meta.dir, '..');
+
+export interface TestContext {
+  readonly application: ${className}Application;
+  readonly http: ReturnType<typeof createHttp>;
+  /** In-process \`http.request\` by default; real loopback HTTP when TEST_MODE=network. */
+  readonly client: JsonRequester;
+  close(): Promise<void>;
+}
+
+/**
+ * Boots the complete application against a fresh, migrated PostgreSQL
+ * database. \`close()\` shuts down, stops any listener and drops the database
+ * even when an earlier step fails.
+ */
+export async function createTestContext(): Promise<TestContext> {
+  const database = await createTestDatabase({
+    adminUrl: requireTestDatabaseUrl(),
+    migrationsFolder: join(APP_ROOT, 'database/migrations'),
+    applicationUrl: process.env.DATABASE_URL,
+    environment: process.env.APP_ENV,
+  });
+
+  let application: ${className}Application | undefined;
+  try {
+    const config = parseConfig(
+      configSchema,
+      mapEnvironment({
+        APP_ENV: 'test',
+        APP_DEBUG: 'false',
+        DATABASE_URL: database.url,
+        DATABASE_MAX_CONNECTIONS: '4',
+      }),
+    );
+    application = await createApplication(config).boot();
+    const http = createHttp(application);
+    const server = process.env.TEST_MODE === 'network' ? serveOnEphemeralPort(http.fetch) : undefined;
+    const booted = application;
+
+    return {
+      application: booted,
+      http,
+      client: server?.requester ?? { request: async (path, init) => http.request(path, init) },
+      async close() {
+        try {
+          await server?.stop();
+          await booted.shutdown();
+        } finally {
+          await database.drop();
+        }
+      },
+    };
+  } catch (error) {
+    await application?.shutdown().catch(() => undefined);
+    await database.drop();
+    throw error;
+  }
+}
+`;
+}
+
+function healthTest(): string {
+  return `import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { parseConfig } from '@framework/core';
+import { createApplication } from '../bootstrap/app';
+import { createHttp } from '../bootstrap/http';
+import { configSchema, mapEnvironment } from '../config';
+
+/**
+ * Smoke test of the generated application: boots the real HTTP stack with a
+ * placeholder database URL (nothing connects until a query runs) and checks
+ * liveness plus the error envelope. Endpoint suites generated by
+ * \`make:crud --verify\` run against a real migrated PostgreSQL database.
+ */
+let http: ReturnType<typeof createHttp>;
+let application: Awaited<ReturnType<typeof createApplication>> | undefined;
+
+beforeAll(async () => {
+  const config = parseConfig(
+    configSchema,
+    mapEnvironment({
+      APP_ENV: 'test',
+      APP_DEBUG: 'false',
+      // Never connected: /health/live does not touch the database.
+      DATABASE_URL: 'postgres://app:unused@127.0.0.1:1/unused',
+    }),
+  );
+  application = await createApplication(config).boot();
+  http = createHttp(application);
+});
+
+afterAll(async () => {
+  await application?.shutdown();
+});
+
+describe('generated application', () => {
+  test('liveness responds and unknown routes use the error envelope', async () => {
+    const call = (path: string) => http.fetch(new Request(\`http://localhost\${path}\`));
+    const live = await call('/health/live');
+    expect(live.status).toBe(200);
+    expect(await live.json()).toEqual({ status: 'ok' });
+
+    const missing = await call('/api/v1/does-not-exist');
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: 'ROUTE_NOT_FOUND' } });
+  });
+});
+`;
+}
+
+function compose({ name }: AppTemplateInput): string {
+  return `services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${name.replaceAll('-', '_')}
+    ports:
+      - '127.0.0.1:5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+`;
+}
