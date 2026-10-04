@@ -1,8 +1,23 @@
+import { join } from 'node:path';
 import { authConfigSchema } from '@framework/auth';
 import { type DeepReadonly, loadConfig } from '@framework/core';
+import { loggingConfigSchema } from '@framework/logging';
 import { z } from 'zod/v4';
 
 const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
+
+/**
+ * Kit-backed subsystem sections (see providers in app/providers/):
+ * - `cache` feeds `cacheProvider` (@framework/cache): the default namespace
+ *   cache, lock store and rate limiter. `memory` is per-process (development);
+ *   `redis` shares state across instances and defaults to REDIS_URL.
+ * - `logging` feeds `loggingProvider` (@framework/logging): console driver at
+ *   info level by default; `file` requires LOG_FILE_PATH.
+ * - `storage` feeds `storageProvider` (@framework/storage): one local disk
+ *   rooted under the playground directory (created on first use, never by
+ *   `storage:check`).
+ */
+const storageRoot = join(import.meta.dir, '..', 'storage');
 
 export const configSchema = z.object({
   app: z.object({
@@ -52,6 +67,26 @@ export const configSchema = z.object({
   events: z.object({
     driver: z.enum(['memory', 'redis']).default('memory'),
   }),
+  cache: z.object({
+    driver: z.enum(['memory', 'redis']).default('redis'),
+    url: z.string().min(1).default('redis://127.0.0.1:6379'),
+    prefix: z.string().min(1).default('playground'),
+  }),
+  logging: loggingConfigSchema,
+  storage: z.object({
+    default: z.string().min(1).default('local'),
+    disks: z
+      .record(
+        z.string(),
+        z.object({
+          driver: z.literal('local'),
+          root: z.string().min(1),
+          visibility: z.enum(['private', 'public']).default('private'),
+          publicBaseUrl: z.string().min(1).optional(),
+        }),
+      )
+      .default({ local: { driver: 'local', root: storageRoot, visibility: 'private' } }),
+  }),
   auth: authConfigSchema,
 });
 
@@ -77,6 +112,18 @@ export const mapEnvironment = (env: Readonly<Record<string, string>>): z.input<t
   workflow: { retentionDays: env.WORKFLOW_RETENTION_DAYS },
   scheduler: { timezone: env.SCHEDULER_TIMEZONE },
   events: { driver: env.EVENTS_DRIVER as never },
+  cache: {
+    driver: env.CACHE_DRIVER as never,
+    url: env.CACHE_URL ?? env.REDIS_URL,
+    prefix: env.CACHE_PREFIX,
+  },
+  logging: { level: env.LOG_LEVEL as never, driver: env.LOG_DRIVER as never, filePath: env.LOG_FILE_PATH },
+  storage: {
+    default: env.STORAGE_DEFAULT_DISK,
+    disks: env.STORAGE_ROOT
+      ? { local: { driver: 'local' as const, root: env.STORAGE_ROOT, visibility: 'private' as const } }
+      : undefined,
+  },
   auth: {},
 });
 

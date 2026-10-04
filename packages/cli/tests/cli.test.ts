@@ -161,8 +161,13 @@ describe('verification report parsing', () => {
   });
 });
 
-async function cli(args: string[]) {
-  const child = Bun.spawn(['bun', 'run', 'bin/cli.ts', ...args], { cwd: PLAYGROUND, stdout: 'pipe', stderr: 'pipe' });
+async function cli(args: string[], env: Record<string, string> = {}) {
+  const child = Bun.spawn(['bun', 'run', 'bin/cli.ts', ...args], {
+    cwd: PLAYGROUND,
+    env: { ...process.env, ...env },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
@@ -259,27 +264,41 @@ describe('infrastructure command gating (process contract)', () => {
     }
   });
 
-  test('missing providers exit 3 with actionable messages (--json)', async () => {
-    // Gating runs before --confirm/--dry-run are honored: without the provider
-    // there is no capability to preview either.
-    const cache = await cli(['--json', 'cache:clear', '--confirm']);
-    expect(cache.code).toBe(EXIT.UNSUPPORTED);
-    const cacheBody = JSON.parse(cache.stdout) as Envelope;
-    expect(cacheBody).toMatchObject({ status: 'error', error: { code: 'UNSUPPORTED_CAPABILITY' } });
-    expect(cacheBody.error?.message).toMatch(/cacheProvider/);
-    expect(cacheBody.error?.message).toMatch(/providers\.ts/);
+  // PENDING `bun install`: the playground CLI now imports @framework/cache
+  // (its `cache(config)` adapter hook), so every spawned process below fails
+  // on module resolution until the workspace dependency is installed. These
+  // end-to-end assertions are written for the post-install reality:
+  // cacheProvider/storageProvider are registered in bootstrap/providers.ts and
+  // bin/cli.ts defines the cache/sessions hooks, so the old exit-3 provider
+  // gates no longer fire here — they are covered against a synthetic fixture
+  // in the in-process suite below instead.
+  describe('PENDING bun install: playground end-to-end through the real adapter hooks', () => {
+    test('cache:clear --confirm clears through the playground cache hook (memory driver)', async () => {
+      // The config defaults to the redis driver, which deliberately refuses
+      // namespace clears (CACHE_UNSUPPORTED_OPERATION); CACHE_DRIVER=memory
+      // selects the driver that clears natively so the command succeeds.
+      const result = await cli(['--json', 'cache:clear', '--confirm'], { CACHE_DRIVER: 'memory' });
+      expect(result.code).toBe(0);
+      const body = JSON.parse(result.stdout) as Envelope;
+      expect(body).toMatchObject({ status: 'ok', data: { cleared: true, driver: 'memory' } });
+    });
 
-    const storage = await cli(['--json', 'storage:check']);
-    expect(storage.code).toBe(EXIT.UNSUPPORTED);
-    expect((JSON.parse(storage.stdout) as Envelope).error?.message).toMatch(/storageProvider/);
+    test('storage:check reports the configured local disk', async () => {
+      const result = await cli(['--json', 'storage:check']);
+      expect(result.code).toBe(0);
+      const body = JSON.parse(result.stdout) as Envelope;
+      expect(body.status).toBe('ok');
+      expect(body.data).toMatchObject({ default: 'local', valid: true });
+    });
 
-    // The playground registers authProvider, so session:prune passes the
-    // provider gate and stops at the missing adapter hook (exit 3 as well).
-    const session = await cli(['--json', 'session:prune', '--dry-run']);
-    expect(session.code).toBe(EXIT.UNSUPPORTED);
-    const sessionBody = JSON.parse(session.stdout) as Envelope;
-    expect(sessionBody).toMatchObject({ status: 'error', error: { code: 'UNSUPPORTED_CAPABILITY' } });
-    expect(sessionBody.error?.message).toMatch(/session-store access/);
+    test('session:prune passes the provider gate and the adapter hook (usage error without flags)', async () => {
+      // Gating and hook checks run before --confirm is required, so a bare
+      // invocation proves the authProvider gate and the sessions hook are in
+      // place without opening a database connection.
+      const refused = await cli(['--json', 'session:prune']);
+      expect(refused.code).toBe(EXIT.USAGE);
+      expect((JSON.parse(refused.stdout) as Envelope).error?.message).toMatch(/--confirm/);
+    });
   });
 });
 
@@ -379,6 +398,23 @@ describe('infrastructure command execution (in process)', () => {
 
   afterAll(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  test('cache:clear and storage:check gate on their providers before honoring flags', async () => {
+    // Gating runs before --confirm/--dry-run are honored: without the provider
+    // there is no capability to preview either. (The playground registers both
+    // providers now, so this refusal path is exercised on this synthetic
+    // fixture instead.)
+    await Bun.write(join(root, 'providers.ts'), 'export const providers = [];\n');
+    const cache = await runInfra(['--json', 'cache:clear', '--confirm'], infrastructureProject({}));
+    expect(cache.code).toBe(EXIT.UNSUPPORTED);
+    expect(cache.envelope).toMatchObject({ status: 'error', error: { code: 'UNSUPPORTED_CAPABILITY' } });
+    expect(cache.envelope.error?.message).toMatch(/cacheProvider/);
+    expect(cache.envelope.error?.message).toMatch(/providers\.ts/);
+
+    const storage = await runInfra(['--json', 'storage:check'], infrastructureProject({}));
+    expect(storage.code).toBe(EXIT.UNSUPPORTED);
+    expect(storage.envelope.error?.message).toMatch(/storageProvider/);
   });
 
   test('cache:clear without --confirm is a usage error; --dry-run never opens the cache', async () => {

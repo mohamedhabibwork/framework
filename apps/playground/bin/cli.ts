@@ -1,5 +1,8 @@
 import { join } from 'node:path';
+import { PgSessionStore } from '@framework/auth';
+import { MemoryCache, RedisCache } from '@framework/cache';
 import { defineProject, frameworkCommands, runCli } from '@framework/cli';
+import { createConnection } from '@framework/database';
 import { listRoutes } from '@framework/http';
 import { createApplication } from '../bootstrap/app';
 import { createHttp } from '../bootstrap/http';
@@ -48,6 +51,35 @@ const project = defineProject({
     prefix: (config as AppConfig).queue.prefix,
     queue: (config as AppConfig).queue.name,
   }),
+  // Runtime handles for the infrastructure commands. Each opens its resources
+  // from the parsed config on demand (the container is never booted here) and
+  // the command closes the handle exactly once.
+  cache: async (config) => {
+    const cacheConfig = (config as AppConfig).cache;
+    const cache =
+      cacheConfig.driver === 'redis'
+        ? new RedisCache({ url: cacheConfig.url, prefix: cacheConfig.prefix })
+        : new MemoryCache();
+    return {
+      driver: cacheConfig.driver,
+      clear: () => cache.clear(),
+      close: () => cache.close(),
+    };
+  },
+  sessions: async (config) => {
+    const appConfig = config as AppConfig;
+    const connection = createConnection({
+      url: appConfig.database.url,
+      maxConnections: 1,
+      applicationName: `${appConfig.app.name}-cli`,
+    });
+    const sessions = new PgSessionStore(connection);
+    return {
+      countExpired: (now?: Date) => sessions.countExpired(now),
+      prune: (now?: Date) => sessions.prune(now),
+      close: () => connection.close(),
+    };
+  },
   routes: async (config) => listRoutes(createHttp(createApplication(config as AppConfig))),
   providers: () => providers.map((provider) => provider.name),
   middleware: () => middleware.describe(),
