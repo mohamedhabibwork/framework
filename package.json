@@ -1,5 +1,6 @@
 {
   "name": "hono-framework",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -12,6 +13,7 @@
     "docs:dev": "bun run --cwd apps/docs dev",
     "docs:build": "bun run --cwd apps/docs build",
     "docs:deploy": "bun run --cwd apps/docs deploy",
+    "release": "bun scripts/release.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test ./packages ./apps",
     "lint": "biome check .",
