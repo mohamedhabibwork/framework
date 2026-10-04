@@ -1,0 +1,15 @@
+{
+  "name": "@framework/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@framework/core": "workspace:*",
+    "@framework/queue": "workspace:*",
+    "bullmq": "6.3.11",
+    "zod": "4.6.5"
+  }
+}
