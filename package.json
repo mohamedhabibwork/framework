@@ -1,0 +1,30 @@
+{
+  "name": "hono-framework",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd apps/playground dev",
+    "cli": "bun run --cwd apps/playground cli",
+    "docs:dev": "bun run --cwd apps/docs dev",
+    "docs:build": "bun run --cwd apps/docs build",
+    "docs:deploy": "bun run --cwd apps/docs deploy",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test ./packages ./apps",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "db:up": "docker compose -f deployment/compose.yaml up -d --wait",
+    "db:down": "docker compose -f deployment/compose.yaml down"
+  },
+  "trustedDependencies": [
+    "docs"
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/bun": "1.4.2",
+    "typescript": "5.9.3"
+  }
+}

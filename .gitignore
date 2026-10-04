@@ -1,0 +1,19 @@
+# deps
+node_modules/
+dist/
+coverage/
+
+# environment
+.env
+.env.*
+!.env.example
+
+# runtime storage (keep placeholders)
+apps/*/storage/**
+!apps/*/storage/**/.gitkeep
+
+# generator end-to-end scratch copies
+.tmp/
+.mimosa
+.v2c
+.wrangler
