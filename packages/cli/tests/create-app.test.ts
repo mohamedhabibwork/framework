@@ -113,8 +113,11 @@ describe('create (app startup generator)', () => {
         'package.json',
         'bootstrap/http.ts',
         'bootstrap/providers.ts',
+        'app/providers/cache.provider.ts',
         'app/providers/database.provider.ts',
         'app/providers/events.provider.ts',
+        'app/providers/logging.provider.ts',
+        'app/providers/storage.provider.ts',
         'app/jobs/index.ts',
         'bin/server.ts',
         'bin/worker.ts',
@@ -173,6 +176,97 @@ describe('create (app startup generator)', () => {
       for (const expected of ['GET /health/live', 'GET /health/ready', 'GET /audit', 'GET /ws']) {
         expect(paths).toContain(expected);
       }
+    },
+    TIMEOUT,
+  );
+
+  test(
+    'kit-backed subsystems are registered and their commands work',
+    async () => {
+      // (a) The three kit-backed providers are registered in the providers
+      // file (this is also the CLI's textual capability gate).
+      const providersSource = await Bun.file(join(app, 'bootstrap/providers.ts')).text();
+      for (const provider of ['cacheProvider', 'loggingProvider', 'storageProvider']) {
+        expect(providersSource).toContain(provider);
+      }
+
+      // (b) storage:check is read-only: it validates the generated disk
+      // configuration without creating the root.
+      const storage = await capture(
+        Bun.spawn(['bun', 'run', 'cli', '--', '--json', 'storage:check'], {
+          cwd: app,
+          env: childEnv(),
+          stdout: 'pipe',
+          stderr: 'pipe',
+        }),
+      );
+      expect(storage.code).toBe(0);
+      const storageBody = JSON.parse(storage.stdout) as {
+        data: {
+          default: string;
+          valid: boolean;
+          disks: {
+            name: string;
+            driver: string;
+            visibility: string;
+            root: string;
+            publicBaseUrl: string;
+            status: string;
+          }[];
+        };
+      };
+      expect(storageBody.data).toMatchObject({ default: 'local', valid: true });
+      expect(storageBody.data.disks).toHaveLength(1);
+      expect(storageBody.data.disks[0]).toMatchObject({
+        name: 'local',
+        driver: 'local',
+        visibility: 'private',
+        publicBaseUrl: '-',
+      });
+      expect(storageBody.data.disks[0]?.status).toMatch(/^ok/);
+      expect(storageBody.data.disks[0]?.root).toMatch(/storage$/);
+
+      // (c) cache:clear --dry-run previews without touching anything.
+      const dryRun = await capture(
+        Bun.spawn(['bun', 'run', 'cli', '--', 'cache:clear', '--dry-run'], {
+          cwd: app,
+          env: childEnv(),
+          stdout: 'pipe',
+          stderr: 'pipe',
+        }),
+      );
+      expect(dryRun.code).toBe(0);
+      expect(dryRun.stdout).toContain('Dry run');
+
+      // The default (redis) driver refuses a namespace clear by design
+      // (CACHE_UNSUPPORTED_OPERATION), so --confirm runs against the memory
+      // driver, which clears natively and needs no infrastructure.
+      const confirm = await capture(
+        Bun.spawn(['bun', 'run', 'cli', '--', '--json', 'cache:clear', '--confirm'], {
+          cwd: app,
+          env: { ...childEnv(), CACHE_DRIVER: 'memory' },
+          stdout: 'pipe',
+          stderr: 'pipe',
+        }),
+      );
+      expect(confirm.code).toBe(0);
+      const confirmBody = JSON.parse(confirm.stdout) as {
+        data: { cleared: boolean; driver: string; entries: number };
+      };
+      expect(confirmBody.data).toEqual({ cleared: true, driver: 'memory', entries: 0 });
+
+      // (d) Without the auth module, session:prune is unsupported (exit 3)
+      // with the quality message pointing at make:auth.
+      const prune = await capture(
+        Bun.spawn(['bun', 'run', 'cli', '--', 'session:prune', '--dry-run'], {
+          cwd: app,
+          env: childEnv(),
+          stdout: 'pipe',
+          stderr: 'pipe',
+        }),
+      );
+      expect(prune.code).toBe(3);
+      expect(prune.stderr).toContain('make:auth');
     },
     TIMEOUT,
   );

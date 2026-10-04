@@ -48,8 +48,11 @@ export function appTemplateFiles(input: AppTemplateInput): readonly NewFile[] {
     { path: 'bootstrap/middleware.ts', content: bootstrapMiddleware() },
     { path: 'bootstrap/openapi.ts', content: bootstrapOpenapi(input) },
     { path: 'bootstrap/providers.ts', content: bootstrapProviders() },
+    { path: 'app/providers/cache.provider.ts', content: cacheProvider() },
     { path: 'app/providers/database.provider.ts', content: databaseProvider() },
     { path: 'app/providers/events.provider.ts', content: eventsProvider() },
+    { path: 'app/providers/logging.provider.ts', content: loggingProvider() },
+    { path: 'app/providers/storage.provider.ts', content: storageProvider() },
     { path: 'app/providers/data.tokens.ts', content: dataTokens() },
     { path: 'app/providers/data.provider.ts', content: dataProvider() },
     { path: 'app/jobs/index.ts', content: jobsRegistry() },
@@ -81,14 +84,17 @@ function packageJson({ name }: AppTemplateInput): string {
     "test": "bun test"
   },
   "dependencies": {
+    "@framework/cache": "workspace:*",
     "@framework/cli": "workspace:*",
     "@framework/core": "workspace:*",
     "@framework/crud": "workspace:*",
     "@framework/database": "workspace:*",
     "@framework/events": "workspace:*",
     "@framework/http": "workspace:*",
+    "@framework/logging": "workspace:*",
     "@framework/openapi": "workspace:*",
     "@framework/queue": "workspace:*",
+    "@framework/storage": "workspace:*",
     "@framework/support": "workspace:*",
     "@framework/validation": "workspace:*",
     "drizzle-orm": "0.45.3",
@@ -139,12 +145,27 @@ SHUTDOWN_TIMEOUT_MS=10000
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/${name.replaceAll('-', '_')}
 DATABASE_MAX_CONNECTIONS=10
 
-# Redis backs queues and (optionally) cross-instance events.
+# Redis backs queues, the shared cache and (optionally) cross-instance events.
 REDIS_URL=redis://127.0.0.1:6379
 QUEUE_NAME=default
 QUEUE_CONCURRENCY=4
 QUEUE_PREFIX=${name}
 EVENTS_DRIVER=memory
+
+# Application cache (cache/locks/rate limiting on one driver).
+CACHE_DRIVER=redis
+CACHE_REDIS_URL=redis://127.0.0.1:6379
+CACHE_REDIS_PREFIX=${name}
+
+# Structured logging (console sink; use driver=file with LOG_FILE_PATH in production).
+LOG_LEVEL=info
+LOG_DRIVER=console
+LOG_NAME=${name}
+
+# Storage disks (the default disk is private and rooted inside the app).
+STORAGE_DEFAULT=local
+STORAGE_ROOT=storage
+STORAGE_VISIBILITY=private
 `;
 }
 
@@ -202,6 +223,20 @@ bun run cli -- make:crud Order --module orders \\\\
 Events: set \`EVENTS_DRIVER=redis\` to fan out \`entity.*\` / \`import.*\` /
 \`export.*\` events across instances; \`GET /ws\` multiplexes them to WebSocket
 clients (subscribe to allowlisted channels such as \`events\`).
+
+## Kit-backed subsystems
+
+The cache (\`CACHE\`/\`LOCK_STORE\`/\`RATE_LIMITER\` via \`@framework/cache\`),
+structured logging (\`LOGGER\` via \`@framework/logging\`) and storage disks
+(\`STORAGE\` via \`@framework/storage\`) are configured by the \`cache\`,
+\`logging\` and \`storage\` sections of \`config/index.ts\` and registered in
+\`bootstrap/providers.ts\`. Three CLI commands operate them:
+
+\`\`\`sh
+bun run cli -- cache:clear --dry-run    # preview; add --confirm to execute
+bun run cli -- storage:check            # validate disk configuration (read-only)
+bun run cli -- session:prune --dry-run  # available once make:auth is installed
+\`\`\`
 `;
 }
 
@@ -263,6 +298,30 @@ export const configSchema = z.object({
   events: z.object({
     driver: z.enum(['memory', 'redis']).default('memory'),
   }),
+  cache: z.object({
+    driver: z.enum(['memory', 'redis']).default('redis'),
+    redis: z.object({
+      url: z.url({ protocol: /^redis$/ }).default('redis://127.0.0.1:6379'),
+      prefix: z.string().min(1).default('${name}'),
+    }),
+  }),
+  logging: z.object({
+    level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
+    driver: z.enum(['console', 'file', 'memory']).default('console'),
+    name: z.string().min(1).default('${name}'),
+    filePath: z.string().min(1).optional(),
+    maxBytes: z.coerce.number().int().positive().optional(),
+  }),
+  storage: z.object({
+    default: z.string().min(1).default('local'),
+    disks: z.object({
+      local: z.object({
+        driver: z.literal('local'),
+        root: z.string().min(1).default('storage'),
+        visibility: z.enum(['private', 'public']).default('private'),
+      }),
+    }),
+  }),
   // @framework:config-schema-sections
 });
 
@@ -286,6 +345,23 @@ export const mapEnvironment = (env: Readonly<Record<string, string>>): z.input<t
   redis: { url: env.REDIS_URL },
   queue: { name: env.QUEUE_NAME, concurrency: env.QUEUE_CONCURRENCY, prefix: env.QUEUE_PREFIX },
   events: { driver: env.EVENTS_DRIVER as never },
+  cache: {
+    driver: env.CACHE_DRIVER as never,
+    redis: { url: env.CACHE_REDIS_URL, prefix: env.CACHE_REDIS_PREFIX },
+  },
+  logging: {
+    level: env.LOG_LEVEL as never,
+    driver: env.LOG_DRIVER as never,
+    name: env.LOG_NAME,
+    filePath: env.LOG_FILE_PATH,
+    maxBytes: env.LOG_MAX_BYTES,
+  },
+  storage: {
+    default: env.STORAGE_DEFAULT,
+    disks: {
+      local: { driver: 'local' as const, root: env.STORAGE_ROOT, visibility: env.STORAGE_VISIBILITY as never },
+    },
+  },
   // @framework:config-env-sections
 });
 
@@ -406,13 +482,24 @@ export function buildOpenApiDocument(version = '1.0.0') {
 
 function bootstrapProviders(): string {
   return `import type { ServiceProvider } from '@framework/core';
+import { cacheProvider } from '../app/providers/cache.provider';
 import { dataProvider } from '../app/providers/data.provider';
 import { databaseProvider } from '../app/providers/database.provider';
 import { eventsProvider } from '../app/providers/events.provider';
+import { loggingProvider } from '../app/providers/logging.provider';
+import { storageProvider } from '../app/providers/storage.provider';
 import type { AppConfig } from '../config';
 
-/** Explicit provider registration. Order is resolved from \`dependsOn\`. */
+/**
+ * Explicit provider registration. Order is resolved from \`dependsOn\`, with
+ * one exception: \`cacheProvider\` must stay above the \`@framework:providers\`
+ * marker — \`make:auth\` appends the auth provider there, and it publishes the
+ * cache's rate limiter during its own registration.
+ */
 export const providers: readonly ServiceProvider<AppConfig>[] = [
+  cacheProvider,
+  loggingProvider,
+  storageProvider,
   databaseProvider,
   eventsProvider,
   dataProvider,
@@ -461,6 +548,50 @@ export const databaseProvider = defineProvider<AppConfig>({
     container.scoped(AUDIT_READER, (r) => new AuditReader(r.resolve(TRANSACTION_CONTEXT).executor));
   },
 });
+`;
+}
+
+function cacheProvider(): string {
+  return `import { createCacheProvider } from '@framework/cache';
+import type { AppConfig } from '../../config';
+
+/**
+ * The application cache stack — \`CACHE\`, \`LOCK_STORE\` and \`RATE_LIMITER\`
+ * — on one driver (config \`cache.driver\`): in-process memory for
+ * single-instance development/tests, redis for state shared across
+ * instances. The auth provider publishes this stack's rate limiter for login
+ * throttling, which is why it registers after this provider.
+ */
+export const cacheProvider = createCacheProvider<AppConfig>((config) => config.cache);
+`;
+}
+
+function loggingProvider(): string {
+  return `import { createLoggingProvider } from '@framework/logging';
+import type { AppConfig } from '../../config';
+
+/**
+ * The shared structured logger (\`LOGGER\`) from the \`logging\` section:
+ * console sink at info level by default; switch to \`file\` (with
+ * \`LOG_FILE_PATH\`) for production. Every entry is redacted and enriched
+ * with the ambient execution context (actor, correlation id).
+ */
+export const loggingProvider = createLoggingProvider<AppConfig>((config) => config.logging);
+`;
+}
+
+function storageProvider(): string {
+  return `import { createStorageProvider } from '@framework/storage';
+import type { AppConfig } from '../../config';
+
+/**
+ * Storage disks from the \`storage\` section: every \`storage.disks\` entry
+ * becomes a singleton under \`storageDiskToken(name)\` and the
+ * \`storage.default\` disk is bound to \`STORAGE\`. The generated default is
+ * one private local disk rooted inside the app (gitignored); add cloud
+ * drivers as new entries with their kit \`options\`.
+ */
+export const storageProvider = createStorageProvider<AppConfig>();
 `;
 }
 
@@ -689,8 +820,11 @@ installGracefulShutdown({
 }
 
 function cli({ name }: AppTemplateInput): string {
-  return `import { join } from 'node:path';
+  return `import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { MemoryCache, RedisCache } from '@framework/cache';
 import { defineProject, frameworkCommands, runCli } from '@framework/cli';
+import { type DatabaseConnection, createConnection } from '@framework/database';
 import { listRoutes } from '@framework/http';
 import { createApplication } from '../bootstrap/app';
 import { createHttp } from '../bootstrap/http';
@@ -700,6 +834,59 @@ import { providers } from '../bootstrap/providers';
 import { type AppConfig, loadAppConfig } from '../config';
 
 const root = join(import.meta.dir, '..');
+
+/**
+ * \`make:auth\` installs the auth module (and the \`@framework/auth\`
+ * dependency) into an existing application, so a freshly created app has
+ * neither: the \`sessions\` hook below therefore only exists once the module
+ * does, and the package is loaded through a runtime specifier for the same
+ * reason. Without it, \`session:prune\` reports itself as unsupported and
+ * points at \`make:auth\`.
+ */
+const authInstalled = existsSync(join(root, 'app/modules/auth/provider.ts'));
+const AUTH_SPECIFIER: string = '@framework/auth';
+
+/** Opens the application cache for \`cache:clear\`; the driver comes from configuration. */
+const openCache = async (rawConfig: unknown) => {
+  const config = rawConfig as AppConfig;
+  const cache =
+    config.cache.driver === 'redis'
+      ? new RedisCache({ url: config.cache.redis.url, prefix: config.cache.redis.prefix })
+      : new MemoryCache();
+  return {
+    driver: config.cache.driver,
+    clear: () => cache.clear(),
+    close: () => cache.close(),
+  };
+};
+
+/**
+ * Opens the auth session store for \`session:prune\` on its own connection:
+ * the store satisfies the CLI's structural contract (count/prune/close) and
+ * \`close()\` releases that connection.
+ */
+const openSessionStore = authInstalled
+  ? async (rawConfig: unknown) => {
+      const config = rawConfig as AppConfig;
+      const auth = (await import(AUTH_SPECIFIER)) as {
+        PgSessionStore: new (connection: DatabaseConnection) => {
+          countExpired(now?: Date): Promise<number>;
+          prune(now?: Date): Promise<number>;
+        };
+      };
+      const connection = createConnection({
+        url: config.database.url,
+        maxConnections: config.database.maxConnections,
+        applicationName: config.app.name,
+      });
+      const store = new auth.PgSessionStore(connection);
+      return {
+        countExpired: (now?: Date) => store.countExpired(now),
+        prune: (now?: Date) => store.prune(now),
+        close: () => connection.close(),
+      };
+    }
+  : undefined;
 
 /** Application-local CLI: the project root comes from this file, never from the shell's cwd. */
 const project = defineProject({
@@ -736,6 +923,8 @@ const project = defineProject({
     prefix: (config as AppConfig).queue.prefix,
     queue: (config as AppConfig).queue.name,
   }),
+  cache: openCache,
+  ...(openSessionStore ? { sessions: openSessionStore } : {}),
   routes: async (config) => {
     // Booting only registers bindings (nothing connects); it makes the
     // listed route table match what the server actually serves.
