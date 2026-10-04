@@ -31,6 +31,16 @@ export const authConfigSchema = z.object({
         .default(30 * 24 * 60 * 60),
     })
     .prefault({}),
+  rateLimit: z
+    .object({
+      /** Master switch for login throttling; disabling is an explicit choice, not a silent bypass. */
+      enabled: z.boolean().default(true),
+      /** Failed logins allowed per email inside one window; the next attempt is answered 429. */
+      maxAttempts: z.number().int().min(1).default(5),
+      /** Fixed-window length in seconds; the failure counter expires with it. */
+      windowSeconds: z.number().int().min(1).default(60),
+    })
+    .prefault({}),
 });
 
 /** Resolved defaults, exported for tests and documentation. */

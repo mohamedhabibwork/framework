@@ -3,6 +3,7 @@
  * Runtime values (classes, tokens, functions) live in their own modules.
  */
 
+import type { RateLimiter } from '@framework/cache';
 import type { DatabaseConnection, SelectOf } from '@framework/database';
 
 // -- Configuration -----------------------------------------------------------
@@ -24,6 +25,14 @@ export interface AuthConfig {
   readonly token: {
     /** Default lifetime after issuance; null means tokens do not expire. */
     readonly ttlSeconds: number | null;
+  };
+  readonly rateLimit: {
+    /** Master switch for login throttling; disabling is an explicit choice, not a silent bypass. */
+    readonly enabled: boolean;
+    /** Failed logins allowed per email inside one window; the next attempt is answered 429. */
+    readonly maxAttempts: number;
+    /** Fixed-window length in seconds; the failure counter expires with it. */
+    readonly windowSeconds: number;
   };
 }
 
@@ -103,6 +112,8 @@ export interface SessionStore {
   touch(id: string, ttlSeconds: number): Promise<void>;
   /** Removes expired sessions; returns the number deleted. */
   prune(now?: Date): Promise<number>;
+  /** Counts expired sessions without deleting them (dry-run reporting). */
+  countExpired(now?: Date): Promise<number>;
 }
 
 export interface IssuedToken {
@@ -181,6 +192,20 @@ export interface AuthRoutesDeps {
   /** DI token of the bound `AuthService` (resolved from the request scope). */
   readonly service: Token<AuthService>;
   readonly session: Pick<AuthConfig['session'], 'cookie' | 'ttlSeconds' | 'secure'>;
+  /**
+   * Login rate-limit knobs (`auth.rateLimit`). Optional for backward
+   * compatibility; when omitted the resolved defaults apply (enabled, 5
+   * attempts, 60s window).
+   */
+  readonly rateLimit?: AuthConfig['rateLimit'];
+  /**
+   * Bound `RateLimiter` from `@framework/cache` (the auth provider publishes
+   * the application's limiter as `AUTH_RATE_LIMITER` when `RATE_LIMITER` is
+   * bound). Optional for backward compatibility: when absent — or when
+   * `rateLimit.enabled` is false — the login endpoint is unlimited. That is an
+   * explicit configuration choice, never a silent bypass.
+   */
+  readonly rateLimiter?: RateLimiter;
   /**
    * Native Hono CSRF middleware guarding the cookie flows. Applications with
    * browser clients pass `csrf({ origin: [...corsOrigins] })`; the default

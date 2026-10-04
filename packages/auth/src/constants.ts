@@ -1,7 +1,14 @@
 /** Constants of `@framework/auth`: tokens and fixed defaults. */
 
 export { authConfigSchema, defaultAuthConfig } from './config-schema';
-export { AUTH_SERVICE, PASSWORD_HASHER, SESSION_STORE, TOKEN_STORE, USER_PROVIDER } from './constants-tokens';
+export {
+  AUTH_RATE_LIMITER,
+  AUTH_SERVICE,
+  PASSWORD_HASHER,
+  SESSION_STORE,
+  TOKEN_STORE,
+  USER_PROVIDER,
+} from './constants-tokens';
 
 /** Authenticated requests renew sessions at most this often (write throttle). */
 export const SESSION_TOUCH_INTERVAL_MS = 60_000;

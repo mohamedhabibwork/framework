@@ -1,8 +1,16 @@
+import { RATE_LIMITER } from '@framework/cache';
 import { type Application, defineProvider, type ServiceProvider } from '@framework/core';
 import { DATABASE, type DatabaseConnection } from '@framework/database';
 import type { ActorResolver } from '@framework/http';
 import { AuthService } from './auth-service';
-import { AUTH_SERVICE, PASSWORD_HASHER, SESSION_STORE, TOKEN_STORE, USER_PROVIDER } from './constants-tokens';
+import {
+  AUTH_RATE_LIMITER,
+  AUTH_SERVICE,
+  PASSWORD_HASHER,
+  SESSION_STORE,
+  TOKEN_STORE,
+  USER_PROVIDER,
+} from './constants-tokens';
 import { createAuthActorResolver } from './guard';
 import { BunPasswordHasher } from './hashing';
 import { PgSessionStore } from './session-store';
@@ -10,12 +18,17 @@ import { PgTokenStore } from './token-store';
 import type { AuthConfig, AuthProviderOptions } from './types';
 import { DatabaseUserProvider } from './user-provider';
 
-export { AUTH_SERVICE, PASSWORD_HASHER, SESSION_STORE, TOKEN_STORE, USER_PROVIDER };
+export { AUTH_RATE_LIMITER, AUTH_SERVICE, PASSWORD_HASHER, SESSION_STORE, TOKEN_STORE, USER_PROVIDER };
 
 /**
  * Registers the auth stack as singletons over the database connection:
  * hasher, user provider, session/token stores and the `AuthService`.
- * Applications add it to their provider list after the database provider.
+ * Applications add it to their provider list after the database provider —
+ * and after the cache provider when login rate limiting is wanted: the
+ * provider then publishes the application's `RATE_LIMITER` as
+ * `AUTH_RATE_LIMITER` for the login-route wiring. When the cache limiter is
+ * not bound, or `auth.rateLimit.enabled` is false, limiting stays off — an
+ * explicit configuration choice, never a silent bypass.
  */
 export function createAuthProvider<TConfig extends { readonly auth: AuthConfig }>(
   options: AuthProviderOptions = {},
@@ -42,6 +55,9 @@ export function createAuthProvider<TConfig extends { readonly auth: AuthConfig }
             tokenTtlSeconds: auth.token.ttlSeconds,
           }),
       );
+      if (auth.rateLimit.enabled && container.has(RATE_LIMITER)) {
+        container.value(AUTH_RATE_LIMITER, container.resolve(RATE_LIMITER));
+      }
     },
   });
 }

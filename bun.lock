@@ -53,6 +53,7 @@
       "name": "@framework/auth",
       "version": "0.1.0",
       "dependencies": {
+        "@framework/cache": "workspace:*",
         "@framework/core": "workspace:*",
         "@framework/database": "workspace:*",
         "@framework/http": "workspace:*",
@@ -175,6 +176,19 @@
       "version": "0.1.0",
       "dependencies": {
         "@framework/core": "workspace:*",
+        "zod": "4.6.5",
+      },
+      "devDependencies": {
+        "@framework/testing": "workspace:*",
+      },
+    },
+    "packages/notifications": {
+      "name": "@framework/notifications",
+      "version": "0.1.0",
+      "dependencies": {
+        "@framework/core": "workspace:*",
+        "@framework/mail": "workspace:*",
+        "@framework/queue": "workspace:*",
         "zod": "4.6.5",
       },
       "devDependencies": {
@@ -476,6 +490,8 @@
     "@framework/logging": ["@framework/logging@workspace:packages/logging"],
 
     "@framework/mail": ["@framework/mail@workspace:packages/mail"],
+
+    "@framework/notifications": ["@framework/notifications@workspace:packages/notifications"],
 
     "@framework/openapi": ["@framework/openapi@workspace:packages/openapi"],
 

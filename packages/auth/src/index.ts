@@ -3,6 +3,7 @@
 // `./constants`; runtime values (classes, tokens, functions) stay in their modules.
 export { AuthService } from './auth-service';
 export {
+  AUTH_RATE_LIMITER,
   AUTH_SERVICE,
   authConfigSchema,
   defaultAuthConfig,

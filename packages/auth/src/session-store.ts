@@ -106,4 +106,12 @@ export class PgSessionStore implements SessionStore {
       .returning({ id: sessions.id });
     return removed.length;
   }
+
+  async countExpired(now: Date = new Date()): Promise<number> {
+    const rows = await this.connection.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(sessions)
+      .where(lt(sessions.expiresAt, now.toISOString()));
+    return rows[0]?.count ?? 0;
+  }
 }

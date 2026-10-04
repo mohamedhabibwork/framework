@@ -103,6 +103,16 @@ describe('Session store', () => {
     expect(await store.prune()).toBe(0);
   });
 
+  test('countExpired reports expired sessions without deleting them', async () => {
+    const store = new PgSessionStore(connection);
+    const before = await store.countExpired();
+    const issued = await store.create(registered.id, 3600);
+    await connection.sql`update sessions set expires_at = now() - interval '1 minute' where id = ${issued.session.id}`;
+    expect(await store.countExpired()).toBe(before + 1);
+    expect(await store.prune()).toBe(1);
+    expect(await store.countExpired()).toBe(before);
+  });
+
   test('rotate invalidates the old token atomically', async () => {
     const store = new PgSessionStore(connection);
     const first = await store.create(registered.id, 3600);

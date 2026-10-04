@@ -1,11 +1,12 @@
 import { toIsoTimestamp, toIsoTimestampOrNull } from '@framework/database';
-import { type FrameworkEnv, notFound, resolve, unauthenticated } from '@framework/http';
+import { type FrameworkEnv, notFound, resolve, tooManyRequests, unauthenticated } from '@framework/http';
 import { validate } from '@framework/validation';
 import { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { csrf } from 'hono/csrf';
 import type { CookieOptions } from 'hono/utils/cookie';
 import { z } from 'zod/v4';
+import { defaultAuthConfig } from './config-schema';
 import { requireAuth } from './middleware';
 import { authPrincipal } from './principals';
 import type { ApiTokenRecord, AuthRoutesDeps, UserRecord } from './types';
@@ -54,10 +55,22 @@ const cookieOptions = (deps: AuthRoutesDeps): CookieOptions => ({
   maxAge: deps.session.ttlSeconds,
 });
 
+/** Fixed-window counter key: failures are counted per lowercased email. */
+const loginKey = (email: string) => `login:${email.toLowerCase()}`;
+
 /**
  * Framework auth endpoints (register/login/logout/me + personal API token
  * management). Mounted by the application, e.g. `.route('/auth', …)` under
  * the API prefix. Credentials are only ever accepted over the JSON body.
+ *
+ * Login throttling is active only when a `rateLimiter` is injected and
+ * `rateLimit.enabled` — either missing leaves the endpoint unlimited, an
+ * explicit configuration choice, never a silent bypass. The flow counts
+ * failures only: one `consume` per login serves as both the pre-verification
+ * check and the failure registration, and a successful login `reset`s the
+ * window, so successes never eat into the allowance. Blocked callers get
+ * `TOO_MANY_REQUESTS` (429) with a `Retry-After` header before any
+ * credential work.
  *
  * CSRF (native Hono middleware) guards the cookie flows only — Bearer-token
  * routes are immune to CSRF, so they accept plain JSON clients without an
@@ -67,6 +80,8 @@ export function defineAuthRoutes(deps: AuthRoutesDeps): Hono<FrameworkEnv> {
   const service = (c: Parameters<typeof resolve>[0]) => resolve(c, deps.service);
   const cookie = cookieOptions(deps);
   const cookieFlow = deps.csrf ?? csrf();
+  const rateLimit = deps.rateLimit ?? defaultAuthConfig.rateLimit;
+  const limiter = deps.rateLimiter && rateLimit.enabled ? deps.rateLimiter : undefined;
 
   return new Hono<FrameworkEnv>()
     .post('/register', cookieFlow, validate('json', registerSchema), async (c) => {
@@ -77,8 +92,17 @@ export function defineAuthRoutes(deps: AuthRoutesDeps): Hono<FrameworkEnv> {
     })
     .post('/login', cookieFlow, validate('json', loginSchema), async (c) => {
       const input = c.req.valid('json');
+      const key = loginKey(input.email);
+      if (limiter) {
+        const verdict = await limiter.consume(key, rateLimit.maxAttempts, rateLimit.windowSeconds);
+        if (!verdict.allowed) {
+          c.header('Retry-After', String(verdict.retryAfterSeconds));
+          throw tooManyRequests();
+        }
+      }
       const result = await service(c).attempt(input.email, input.password);
       if (!result) throw unauthenticated('Invalid credentials');
+      if (limiter) await limiter.reset(key);
       setCookie(c, deps.session.cookie, result.sessionToken, cookie);
       return c.json({ user: publicUser(result.user) }, 200);
     })
