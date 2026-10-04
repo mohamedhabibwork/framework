@@ -3,6 +3,8 @@ import { defineConfig } from 'astro/config';
 import mdx from '@astrojs/mdx';
 import cloudflare from '@astrojs/cloudflare';
 import starlight from '@astrojs/starlight';
+import { docsVersions, formatLine } from './src/data/versions';
+import { sidebarFor } from './src/data/sidebar';
 
 // MDX 8's markdown engine ("satteri") needs a runtime binding: native on
 // Node, WebAssembly in browsers and in Astro 7's workerd-based dev isolation.
@@ -26,31 +28,20 @@ export default defineConfig({
 			title: 'Framework',
 			description: 'Laravel-inspired TypeScript framework on Bun + Hono + Drizzle + Zod',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' }],
-			// Versioned docs: the current release is shown in the landing hero and
-			// listed on /versions; older versions archive to their own locale once
-			// a breaking release ships (Laravel-style docs versioning).
+			// Versioned docs: the current release is shown in the header version
+			// pill and listed on /versions; older versions archive to their own
+			// locale when a breaking pre-1.0 minor ships (Laravel-style docs
+			// versioning). The archive is written by scripts/snapshot-version.mjs,
+			// which is only ever run from the root release script.
 			locales: {
-				root: { label: 'English (v0.1)', lang: 'en' },
+				root: { label: `English (${formatLine(docsVersions.latest)})`, lang: 'en' },
 				ar: { label: 'العربية', lang: 'ar', dir: 'rtl' },
 			},
-			sidebar: [
-				{ label: 'Introduction', link: '/' },
-				{ label: 'Getting started', slug: 'getting-started' },
-				{ label: 'Helpers', slug: 'helpers' },
-				{ label: 'CLI reference', slug: 'cli-reference' },
-				{ label: 'Authoring modules', slug: 'modules' },
-				{ label: 'Platform guide', slug: 'platform' },
-				{ label: 'Testing', slug: 'testing' },
-				{ label: 'Deployment', slug: 'deployment' },
-				{
-					label: 'Reference',
-					items: [
-						{ label: 'Versions', slug: 'versions' },
-						{ label: 'Implementation status', slug: 'status' },
-						{ label: 'Architecture decisions', slug: 'decisions' },
-				],
+			sidebar: sidebarFor(docsVersions.latest),
+			components: {
+				// Renders the site title plus a "v0.1" pill linking to /versions/.
+				SiteTitle: './src/components/VersionPicker.astro',
 			},
-		],
 		}),
 		mdx(),
 	],
