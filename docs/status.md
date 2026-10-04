@@ -1,0 +1,72 @@
+# Implementation Status
+
+Release classification required by `framwork.md` §10. **Validated** means covered by an automated test that passes in `bun run test`; **implemented** means working and exercised manually but without a dedicated automated test; **planned** means specified but not built (the CLI lists it and exits with code 3).
+
+Last verified: 2026-10-04 — `bun run test` 179 pass / 0 fail, `bun run typecheck` clean, `bun run lint` clean.
+
+## Delivery phases
+
+| Phase | Deliverable | Status | Gate evidence |
+|---|---|---|---|
+| 0 | Runtime/adapter decisions, pinned dependencies | Done | [decisions.md](architecture/decisions.md) compatibility matrix |
+| 1 | Core lifecycle, config, request scope, HTTP errors | Done | `packages/core/tests`, `packages/http/tests` (concurrent scope isolation, partial-boot cleanup, disposal) |
+| 2 | One coherent CRUD module with schemas/policy/OpenAPI | Done | `apps/playground` products suite on real PostgreSQL, `tests/contract.test.ts` (OpenAPI drift + typed RPC client), migration `0000_create-products.sql` |
+| 3 | Sessions/tokens/recovery/OTP/policies | Sessions/tokens/policies delivered; recovery/verification/OTP/JWT planned | `@framework/auth` suite on real PostgreSQL (`packages/auth/tests`: hashing, session rotation/expiry/sliding renewal, hashed+ability-scoped+revocable tokens, CSRF on cookie flows, actor propagation) and the Phase 3 gate `packages/cli/tests/auth-app.test.ts` (create → `make:auth` → `make:crud --access authenticated --verify` incl. 401/403 endpoint cases) |
+| 4 | Cache/queue/storage/mail/events/scheduling | Partial | Events (`packages/events`: in-memory + Redis pub/sub, WebSocket hub, validated), queue (`packages/queue`: BullMQ dispatch/worker/batches, retries, timeouts, validated), scheduling (`packages/scheduler`: BullMQ job schedulers, overlap locks, validated) and workflows (`packages/workflow`: durable Pipeline/Stage/Action engine over Postgres + BullMQ, validated). Cache/storage/mail/notifications still planned |
+| 5 | CLI inventory and generators | Partial | `make:crud` and `create` validated end to end; most `make:*` generators planned |
+| 6 | Release documentation and deployment | Partial | Local Postgres/Redis compose, server + worker entry points with graceful shutdown; Starlight docs site (`apps/docs`, MDX + Cloudflare adapter) building and deployable via wrangler; no Dockerfile/scheduler yet |
+
+## Packages
+
+| Package | Status | Notes |
+|---|---|---|
+| `@framework/core` | Validated | Container (singleton/scoped/transient, cycle + captive-dependency detection), providers (ordering, deferred, partial-boot cleanup), validated frozen config, redaction, graceful shutdown, `ExecutionContext` (default scope binding; overridden per request/job with real ids/actors) |
+| `@framework/http` | Validated | Kernel (request id → body limit → request scope), `onError` envelope, middleware alias/group registry, duplicate-route detection, route listing, resource policies, principal plumbing (`PrincipalLike` context var, `requireAuth` → 401, `authenticatedPolicy`, `hasAbility`) |
+| `@framework/auth` | Validated | Session + personal API token authentication: argon2id password hashing, framework-owned `users`/`sessions`/`api_tokens` tables, DB-backed session store (sha256 at rest, rotation on login, sliding expiry, prune) and token store (hash at rest, abilities, expiry, revocation, ownership checks), `DatabaseUserProvider` (+ swappable `UserProvider` contract), `AuthService` (`register`/`attempt`/`startSession`/`issueToken`/`logout`/revoke-all), guard wired via the kernel's `resolveActor` (identity visible to `currentActor()` everywhere), `requireAbility` middleware, `/auth` endpoints (register/login/logout/me, token issue/list/revoke; CSRF on cookie flows via native Hono `csrf`), `createAuthProvider` + `authActorResolver` composition helpers, OpenAPI operations in the playground |
+| `@framework/validation` | Validated | `validate()` (zod-validator, 422 field errors, RPC-preserving types), form requests with authorization hooks |
+| `@framework/database` | Validated | postgres-js connection, AsyncLocalStorage transactions with savepoints, CRUD mixins incl. bulk operations (`createMany`, `updateMany`, `deleteMany`, `deleteByIds`, `restoreMany` — audited per record), `findMany`/`count`/`exists`, `DataContext` (transactions + execution context), audit trail (`audit_logs`, `Auditable` mixin, `AuditReader`), bounded pagination, locked migrations + status, Drizzle–Zod adapter, ISO timestamp helper |
+| `@framework/crud` | Validated | Generic CRUD layer over the database mixins: `ResourceService` base (shared `ServiceContext` — actor + transaction chain — injected per scope, lifecycle hooks, `transaction()` orchestration, entity events, not-found translation), `ResourceController` base (typed handlers + serialization), `auditRoutes` (`/audit` endpoints), `resourceOperations` + `dataOperations` (OpenAPI operations derived from the controller contract and the import/export routes), CSV codec, queued import/export jobs (`defineImportJob`/`defineExportJob`, partial-success batches, progress events, `LocalExportStore`), `DataPorter` + `importExportRoutes` (mounted and OpenAPI-documented in the playground and generated apps). Generated services/controllers extend these bases with default wiring users can override |
+| `@framework/events` | Validated | `EventBus` contract, in-memory bus, Redis pub/sub (namespaced, validated payloads, dedicated subscriber connection), `RealtimeHub` + native WebSocket routes (channel allowlist, per-connection authorization, subscription limits) |
+| `@framework/queue` | Validated | BullMQ `QueueManager` (payload validation before enqueue, idempotency keys, delayed dispatch, status/failed/retry/counts/pause) and `JobWorker` (per-job scopes with the dispatcher's execution context, timeouts, graceful drain). Batches: `dispatchBatch` fans out validated payloads under one id with Redis bookkeeping (atomic HINCRBY counters + HSETNX finish claim), `batchStatus`/`batchFailures`/`cancelBatch`, and an optional completion job fired when the batch settles |
+| `@framework/workflow` | Validated | Durable Workflow → Pipeline → Stage → Action engine over Postgres (`workflow_runs` + `workflow_nodes` execution tree, conditional transitions) with BullMQ as transport: `defineWorkflow`/`definePipeline`/`defineStage`/`defineAction` + `parallel()` groups, `via: 'inline' | 'queue'` execution placement, stage/action `precheck` gates and `when` conditions, per-action retries/timeouts, reverse-order saga compensation, wait-for-event stages (event-bus bridge + timeout sweep), cancel/retry/resume/prune, `workflowRoutes()` admin API, progress events on `workflow` / `workflow.run.<id>` channels |
+| `@framework/scheduler` | Validated | `defineSchedule` (cron + timezone + `skip`/`replace` overlap) onto BullMQ job schedulers; fires run on a dedicated `-schedules` queue consumed by the scheduler process and dispatch jobs or workflows with a Redis overlap lock and `schedule:{name}:{fireId}` idempotency |
+| `@framework/openapi` | Validated | OpenAPI 3.1 from operation metadata + Zod (`z.toJSONSchema`), route/operation drift check |
+| `@framework/testing` | Validated | Isolated per-run PostgreSQL databases (always dropped), production-target guards, ephemeral loopback server |
+| `@framework/support` | Validated | Laravel-style helpers: `config()`/`env()` (runtime config + process env), `abort()`/`abort_if()`/`abort_unless()` (catalogued HTTP errors), `logger()` (JSON lines bound to the current correlation id/actor), `correlationId()`/`currentActor()`/`execution()` (ambient scope via AsyncLocalStorage, wired into the HTTP kernel and job worker), `retry()`, `sleep()`, `tap()`, `value()`, `uuid()`, `nowIso()`, `redactForLogs()` |
+| `@framework/cli` | Validated (subset) | See command table |
+| cache, storage, mail, notifications, logging | Planned | Phase 4 |
+
+## CLI commands
+
+| Command | Status |
+|---|---|
+| `create` | Validated — full app startup generator (`packages/cli/tests/create-app.test.ts`): generates a workspace-member application (config, bootstrap, providers incl. events/queue/audit, health + audit + realtime routes, server/worker/CLI bins, tests, compose, drizzle config); generated app typechecks, passes its suite, migrates `audit_logs`, and accepts `make:crud --verify`. `--with-demo` additionally runs `make:crud` inside the new app (same pipeline, no duplication) to ship a sample products module with migration; the one-command path is gate-tested including its endpoint suite |
+| `make:crud` | Validated — new table (+ `--soft-delete`), existing table with integer key, `--access public|authenticated` (authenticated policies map CRUD abilities to `<resource>.<ability>` token abilities; generated suites include 401/403 cases; requires the auth module), `--test-mode network`, conflict and route-collision refusal, generated app's full suite (`packages/cli/tests/generated-app.test.ts`), and inside `create`-generated apps |
+| `make:auth` | Validated — Phase 3 gate (`packages/cli/tests/auth-app.test.ts`): installs `app/modules/auth` (provider + routes), registers the dependency (`@framework/auth` + `bun install`), wires config/schema/provider/kernel-guard/route-mount edits, and generates the `users`/`sessions`/`api_tokens` migration; `--guards session,api-token`, `--dry-run`, refuses when already installed |
+| `make:module --crud` | Implemented (delegates to the same pipeline) |
+| `queue:work`, `queue:status` | `queue:work` implemented (foreground worker, SIGTERM/SIGINT drain — exercised manually); `queue:status` validated against real Redis |
+| `help`, `list`, `--json` envelope, exit codes 0/2/3, `--dry-run` writes nothing | Validated (`packages/cli/tests/cli.test.ts`) |
+| `db:generate`, `openapi:check` | Validated (end-to-end test) |
+| `db:migrate`, `db:status`, `db:check`, `config:check`, `config:show`, `doctor`, `route:list`, `module:list`, `middleware:list`, `openapi:generate`, `serve`, `dev`, `typecheck`, `test`, `lint`, `format` | Implemented |
+| `workflow:list`, `workflow:status`, `workflow:retry`, `workflow:cancel`, `workflow:prune` | Validated against real PostgreSQL (`packages/workflow/tests`); exercised manually against the playground demo |
+| `schedule:list`, `schedule:run`, `schedule:test`, `schedule:work` | Validated against real Redis (`packages/scheduler/tests`); `schedule:test` verified end-to-end (fire → scheduler process → workflow run on the worker) |
+| `build`, `integration:*`, all other `make:*`, `db:seed`, `db:rollback`, `db:fresh`, remaining `queue:*`, `cache:*`, `session:prune`, `storage:*` | Planned (exit 3) |
+
+Run `bun run cli -- list` for the live catalog.
+
+## Generated application (`create`)
+
+`bun run cli -- create apps/<name>` generates the complete application skeleton the release gate exercises: validated config (app/http/database/redis/queue/events), database + events providers, `audit_logs` in the canonical schema, `/health` + `/audit` + `/ws` (WebSocket event multiplexing) routes, `bin/server.ts` + `bin/worker.ts` + `bin/cli.ts` entry points, a health smoke suite, deployment compose, drizzle config, and a README. `make:crud --verify` then adds a full resource module. Generated apps are framework-workspace members: dependencies resolve through `workspace:*` after a root `bun install` (the `create` command runs it unless `--no-install`).
+
+## Known limitations
+
+- Duplicate-route detection cannot distinguish two *consecutive* identical registrations from one registration with several handlers (see `packages/http/src/routing/routes.ts`).
+- Generated CRUD supports a single primary key named `id` (uuid for new tables; uuid/integer/serial for existing tables). Unique/foreign-key fixtures, relations, enums and JSON columns are rejected rather than guessed.
+- Generated resources support `--access public` and (after `make:auth`) `--access authenticated`; per-principal ownership policies (row-level `userId` scoping) are still handwritten.
+- Password recovery, email verification, OTP and JWT/JWK guards are planned (Phase 3 deferred scope). Login rate limiting needs the cache package.
+- Import/export covers CSV and JSON (streaming keyset batches, queued, partial-success imports). XLSX/PDF formats are planned.
+- `workflowRoutes()` admin endpoints are still unprotected by default; guards now exist — pass an `authorize` callback backed by `@framework/auth` (`requireAbility`, `authenticatedPolicy`) when mounting them.
+- Batch bookkeeping (queue batches) lives in Redis with a TTL, so batch history is bounded by design; durable fan-out with history belongs in workflows.
+- Export artifacts live in a local `LocalExportStore`; multi-node deployments need a shared store.
+- Node runtime is not selectable; only Bun is validated.
+- The docs site vendors MDX 8's wasm32 runtime (`apps/docs/vendor/`, installed by a postinstall script) because bun skips wasm32 optional dependencies; `astro dev` renders through Node via the Cloudflare adapter's `prerenderEnvironment: 'node'`.
