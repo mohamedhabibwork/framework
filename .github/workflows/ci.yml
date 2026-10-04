@@ -46,7 +46,7 @@ jobs:
       # must not be a connectable target — mirrors the local test setup.
       DATABASE_URL: postgres://app:unused@127.0.0.1:1/unused
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2 # pinned per docs/architecture/decisions.md
