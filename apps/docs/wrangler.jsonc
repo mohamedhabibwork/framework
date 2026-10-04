@@ -1,0 +1,9 @@
+{
+	// Static docs: dist/ is served as Worker static assets. Deploy with
+	// `bun run --cwd apps/docs deploy` (wrangler login required).
+	"name": "framework-docs",
+	"compatibility_date": "2026-10-01",
+	"assets": {
+		"directory": "./dist"
+	}
+}

@@ -1,0 +1,30 @@
+---
+title: Versions
+description: Which documentation version matches which framework release.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The docs track the framework's minor releases. The version selector in the
+language switcher shows the current locale; this page maps documentation
+versions to framework releases.
+
+| Docs version | Framework | Status |
+|---|---|---|
+| **v0.1** | 0.1.x | Current — everything in these pages |
+
+## Versioning policy
+
+- **Minor releases** (0.x) may add features; pages are updated in place and
+  notable changes are listed on this page.
+- **Breaking releases** (1.0 and beyond) archive the previous docs under a
+  version prefix (`/v0.1/...`) so running applications can keep reading the
+  documentation that matches their installed version, Laravel-style.
+- The generated application pins the framework version it was created with
+  (`workspace:*` while inside the framework workspace); upgrade deliberately
+  and re-read the affected pages.
+
+<Aside type="caution">
+	Before 1.0, APIs may change between minor versions. `docs/status.md` lists
+	exactly what is validated, implemented or planned.
+</Aside>
