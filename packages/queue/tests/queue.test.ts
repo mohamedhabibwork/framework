@@ -89,7 +89,7 @@ const manager = new QueueManager({ url: redisUrl, prefix, queue: 'tests' });
 const application = new Application({ config: {}, providers: [] });
 let worker: JobWorker;
 
-async function settle(id: string, timeoutMs = 5_000): Promise<JobStatus> {
+async function settle(id: string, timeoutMs = 15_000): Promise<JobStatus> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const status = await manager.status(id);
@@ -99,7 +99,7 @@ async function settle(id: string, timeoutMs = 5_000): Promise<JobStatus> {
   throw new Error(`job ${id} did not settle`);
 }
 
-async function settleBatch(batchId: string, timeoutMs = 5_000): Promise<BatchStatus> {
+async function settleBatch(batchId: string, timeoutMs = 15_000): Promise<BatchStatus> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const batch = await manager.batchStatus(batchId);

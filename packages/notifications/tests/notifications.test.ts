@@ -272,17 +272,69 @@ describe('queued delivery (BullMQ on real Redis)', () => {
   });
 
   test('a transient channel failure retries via the queue and ends delivered', async () => {
-    transport.failNext(new Error('transient smtp failure'));
-    const { id, jobId } = await notifications.sendQueued({
-      name: 'user.welcome',
-      channels: ['email'],
-      to: 'ken@example.com',
-      payload: { userName: 'Ken' },
+    // Own stack (unique prefix + own worker and transport) so `failNext` can
+    // only ever be consumed by THIS test's delivery — under load, a shared
+    // queue lets a previous test's job race the arming and complete on its
+    // first attempt instead.
+    const transientPrefix = `notif-transient-${crypto.randomUUID()}`;
+    const transientTransport = new MemoryMailTransport();
+    transientTransport.failNext(new Error('transient smtp failure'));
+    const transientManager = new QueueManager({ url: redisUrl, prefix: transientPrefix, queue: 'tests' });
+    const transientStore = new InMemoryNotificationStore();
+    const transientDeliveryJob = defineNotificationJob({ attempts: 2, backoffMs: 10 });
+    const transientApp = new Application({
+      config: {},
+      providers: [
+        defineProvider({
+          name: 'mail',
+          register({ container }) {
+            container.value(MAILER, new Mailer(transientTransport, { from }));
+          },
+        }),
+        defineProvider({
+          name: 'queue-test',
+          register({ container }) {
+            container.value(QUEUE, transientManager);
+          },
+        }),
+        defineProvider({
+          name: 'store-test',
+          register({ container }) {
+            container.value(NOTIFICATION_STORE, transientStore);
+          },
+        }),
+        createNotificationsProvider({ definitions: [welcome], job: transientDeliveryJob }),
+      ],
     });
-    const status = await settleDelivered(id);
-    expect(status.channels.find((channel) => channel.channel === 'email')?.state).toBe('delivered');
-    const job = await settleJob(jobId, 'completed');
-    expect(job.attempts).toBeGreaterThanOrEqual(2);
+    await transientApp.boot();
+    const transientNotifications = transientApp.container.resolve(NOTIFICATIONS);
+    const transientWorker = new JobWorker(transientManager, transientApp, [transientDeliveryJob], { concurrency: 1 });
+    transientWorker.start();
+    try {
+      const { id, jobId } = await transientNotifications.sendQueued({
+        name: 'user.welcome',
+        channels: ['email'],
+        to: 'ken@example.com',
+        payload: { userName: 'Ken' },
+      });
+      const deadline = Date.now() + 15_000;
+      for (;;) {
+        const job = await transientManager.status(jobId);
+        if (job?.state === 'completed') {
+          expect(job.attempts).toBeGreaterThanOrEqual(2);
+          break;
+        }
+        if (Date.now() > deadline) throw new Error(`job ${jobId} did not complete (retries not observed)`);
+        await Bun.sleep(25);
+      }
+      const status = await transientNotifications.status(id);
+      expect(status?.channels.find((channel) => channel.channel === 'email')?.state).toBe('delivered');
+    } finally {
+      await transientWorker.close();
+      await transientManager.queue.obliterate({ force: true });
+      await transientManager.close();
+      await transientApp.shutdown();
+    }
   });
 
   test('exhausted retries end with failed channel status and a failed job', async () => {
