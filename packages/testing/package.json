@@ -1,0 +1,14 @@
+{
+  "name": "@framework/testing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@framework/core": "workspace:*",
+    "@framework/database": "workspace:*",
+    "postgres": "3.4.9"
+  }
+}
