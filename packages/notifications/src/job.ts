@@ -1,7 +1,13 @@
 import { defineJob, type JobContext, type JobDefinition } from '@framework/queue';
 import { z } from 'zod/v4';
 import { NOTIFICATIONS } from './constants';
-import { databaseContentSchema, emailContentSchema, notificationEnvelopeSchema } from './envelope';
+import {
+  databaseContentSchema,
+  emailContentSchema,
+  messagingContentSchema,
+  notificationEnvelopeSchema,
+  pushContentSchema,
+} from './envelope';
 import type { NotificationJobOptions, NotificationJobPayload, NotificationJobResult } from './types';
 
 /** Identity of the built-in delivery job on the queue. */
@@ -19,6 +25,8 @@ export const notificationJobPayloadSchema: z.ZodType<NotificationJobPayload> = z
     envelope: notificationEnvelopeSchema,
     email: emailContentSchema.optional(),
     database: databaseContentSchema.optional(),
+    push: pushContentSchema.optional(),
+    messaging: messagingContentSchema.optional(),
   })
   .refine((payload) => !payload.envelope.channels.includes('email') || payload.email !== undefined, {
     error: 'The email channel content is required when the email channel is selected',
@@ -27,6 +35,14 @@ export const notificationJobPayloadSchema: z.ZodType<NotificationJobPayload> = z
   .refine((payload) => !payload.envelope.channels.includes('database') || payload.database !== undefined, {
     error: 'The database channel content is required when the database channel is selected',
     path: ['database'],
+  })
+  .refine((payload) => !payload.envelope.channels.includes('push') || payload.push !== undefined, {
+    error: 'The push channel content is required when the push channel is selected',
+    path: ['push'],
+  })
+  .refine((payload) => !payload.envelope.channels.includes('messaging') || payload.messaging !== undefined, {
+    error: 'The messaging channel content is required when the messaging channel is selected',
+    path: ['messaging'],
   });
 
 /**

@@ -21,6 +21,12 @@ export { NOTIFICATION_STORE, NOTIFICATIONS };
  * surfaces as the container's own unbound-token error at first resolution.
  * Applications add this provider after the mail provider and their queue
  * wiring.
+ *
+ * The `push`/`messaging` channels delegate to notifykit providers declared in
+ * `options.providers` (the `notifications.providers` section) and are created
+ * lazily through notifykit's `createNotifier`; `options.kitProviders` passes
+ * custom notifykit driver definitions through to that same construction path
+ * (e.g. notifykit's testing fake). Email stays owned by `@framework/mail`.
  */
 export function createNotificationsProvider<TConfig extends object = object>(
   options: NotificationsProviderOptions = {},
@@ -37,6 +43,8 @@ export function createNotificationsProvider<TConfig extends object = object>(
           store: r.resolve(NOTIFICATION_STORE),
           ...(options.definitions ? { definitions: options.definitions } : {}),
           ...(options.job ? { job: options.job } : {}),
+          ...(options.providers ? { providers: options.providers } : {}),
+          ...(options.kitProviders ? { kitProviders: options.kitProviders } : {}),
         });
       });
     },

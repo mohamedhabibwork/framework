@@ -5,6 +5,7 @@
 import type { ExecutionContext, JsonObject } from '@framework/core';
 import type { Mailer } from '@framework/mail';
 import type { JobDefinition, QueueManager } from '@framework/queue';
+import type { NotificationDriverDefinition } from '@mohamedhabibwork/notifykit';
 import type { z } from 'zod/v4';
 
 // -- Channels ------------------------------------------------------------------
@@ -13,8 +14,23 @@ import type { z } from 'zod/v4';
  * Delivery channels. SMS is planned but deliberately not implemented (see
  * `SMS_PLANNED`); nothing is ever delivered to a channel the notification did
  * not declare (spec §8).
+ *
+ * - `email` delivers through the bound `@framework/mail` `Mailer` — the mail
+ *   transport stays owned by `@framework/mail` (notifykit's SMTP provider is
+ *   deliberately NOT adopted).
+ * - `database` persists through the application-owned `DatabaseChannelStore`.
+ * - `push` and `messaging` delegate to `@mohamedhabibwork/notifykit` providers
+ *   configured under `notifications.providers` (see
+ *   {@link NotificationsProvidersConfig}): `push` targets device-push
+ *   providers (`fcm`, `apns`, `webpush`, `huawei`), `messaging` targets
+ *   messaging providers (`telegram`, `slack`). Provider SDKs are optional
+ *   peers loaded lazily by notifykit — see `PUSH_PROVIDER_TYPES` /
+ *   `MESSAGING_PROVIDER_TYPES`.
  */
-export type NotificationChannel = 'email' | 'database';
+export type NotificationChannel = 'email' | 'database' | 'push' | 'messaging';
+
+/** Channels whose engine is a notifykit provider (config under `notifications.providers`). */
+export type KitChannel = Extract<NotificationChannel, 'push' | 'messaging'>;
 
 // -- Built content ---------------------------------------------------------------
 
@@ -31,6 +47,26 @@ export type DatabaseContent = {
   readonly body: string;
 };
 
+/**
+ * Content the `toPush` builder produces for the push channel; mapped onto
+ * notifykit's `notification` content (`title`/`body`) for the configured
+ * device-push provider (`fcm`, `apns`, `webpush`, `huawei`).
+ */
+export type PushContent = {
+  readonly title?: string;
+  readonly body: string;
+};
+
+/**
+ * Content the `toMessaging` builder produces for the messaging channel;
+ * mapped onto notifykit's `notification` content for the configured messaging
+ * provider (`telegram`, `slack`).
+ */
+export type MessagingContent = {
+  readonly title?: string;
+  readonly body: string;
+};
+
 // -- Envelope ------------------------------------------------------------------
 
 /**
@@ -38,12 +74,21 @@ export type DatabaseContent = {
  * crosses process boundaries (inline send uses it directly, queued delivery
  * embeds it in the job payload). `to` must be a valid email address when the
  * email channel is selected; database-only recipients may be any identifier.
+ *
+ * The provider-agnostic recipient for `push`/`messaging` is the string `to`
+ * (device token, chat id, channel id — the app decides), wrapped into the
+ * provider's recipient by the engine (see `NotificationProviderConfig.target`).
+ * `native` is a loosely validated passthrough object forwarded verbatim as
+ * notifykit's per-send `native` options (`parse_mode`, TTL, blocks, ...) and
+ * is only read by the `push`/`messaging` channels — provider-specific typing
+ * lives in the provider config, never in this envelope.
  */
 export type NotificationEnvelope = {
   readonly name: string;
   readonly channels: readonly NotificationChannel[];
   readonly to: string;
   readonly payload: JsonObject;
+  readonly native?: JsonObject;
 };
 
 // -- Delivery status --------------------------------------------------------------
@@ -75,7 +120,9 @@ export interface DeliveryStatus {
 
 // -- Store ---------------------------------------------------------------------
 
-/** One notification record the store persists — the application's own schema decides the table shape. */
+/**
+ * One notification record the store persists — the application's own schema decides the table shape.
+ */
 export interface NotificationRecordInput {
   readonly name: string;
   readonly recipient: string;
@@ -85,6 +132,10 @@ export interface NotificationRecordInput {
   readonly email?: EmailContent;
   /** Built database content; present when the database channel was selected. */
   readonly database?: DatabaseContent;
+  /** Built push content; present when the push channel was selected. */
+  readonly push?: PushContent;
+  /** Built messaging content; present when the messaging channel was selected. */
+  readonly messaging?: MessagingContent;
 }
 
 /**
@@ -131,6 +182,10 @@ export interface NotificationDefinition<TPayload extends JsonObject = JsonObject
   toEmail?(payload: TPayload): EmailContent;
   /** Required when `channels` includes `database`. */
   toDatabase?(payload: TPayload): DatabaseContent;
+  /** Required when `channels` includes `push`. */
+  toPush?(payload: TPayload): PushContent;
+  /** Required when `channels` includes `messaging`. */
+  toMessaging?(payload: TPayload): MessagingContent;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous definitions erased to one runtime shape (same pattern as queue's JobList)
@@ -144,6 +199,8 @@ export type NotificationJobPayload = {
   readonly envelope: NotificationEnvelope;
   readonly email?: EmailContent;
   readonly database?: DatabaseContent;
+  readonly push?: PushContent;
+  readonly messaging?: MessagingContent;
 };
 
 /** JSON-safe result of the built-in delivery job. */
@@ -163,6 +220,53 @@ export interface NotificationJobOptions {
 
 // -- Service / provider options ------------------------------------------------
 
+/**
+ * Configuration entry for one notifykit provider (the `notifications.providers`
+ * section). Only channels the application declares carry an entry; a send to a
+ * kit channel without one fails with `NOTIFICATION_PROVIDER_UNAVAILABLE`.
+ *
+ * `type` is a notifykit provider name: device-push (`fcm`, `apns`, `webpush`,
+ * `huawei`) for the `push` channel, messaging (`telegram`, `slack`) for the
+ * `messaging` channel (see `PUSH_PROVIDER_TYPES` / `MESSAGING_PROVIDER_TYPES`).
+ * Provider SDKs (`firebase-admin`, `web-push`, `@parse/node-apn`) are optional
+ * peers loaded lazily by notifykit when the notifier is created — a missing
+ * peer or an unknown type surfaces as `NOTIFICATION_PROVIDER_UNAVAILABLE`, not
+ * as a config error. `options` is forwarded verbatim to notifykit's
+ * `createNotifier` and is that provider's own contract (same pass-through as
+ * `@framework/storage`'s kit options).
+ */
+export interface NotificationProviderConfig {
+  /** The notifykit provider powering the channel. */
+  readonly type: string;
+  /**
+   * The notifykit recipient key the envelope's string target is delivered as.
+   * Built-in types have documented defaults (`fcm`/`huawei` → `token`,
+   * `apns` → `deviceToken`, `webpush` → `endpoint`, `telegram` → `chatId`,
+   * `slack` → `channel`); custom kit providers (e.g. notifykit's testing
+   * fake) must name theirs.
+   */
+  readonly target?: string;
+  /** Pass-through options for notifykit's `createNotifier` (botToken, credential, vapid, ...). */
+  readonly options?: Readonly<Record<string, unknown>>;
+}
+
+/** The `notifications.providers` config section: one provider per kit channel. */
+export interface NotificationsProvidersConfig {
+  /** Provider for the `push` channel (fcm/apns/webpush/huawei). */
+  readonly push?: NotificationProviderConfig;
+  /** Provider for the `messaging` channel (telegram/slack). */
+  readonly messaging?: NotificationProviderConfig;
+}
+
+/**
+ * A custom notifykit driver definition (e.g. notifykit's testing fake) passed
+ * through to `createNotifier` so the production construction path runs
+ * unchanged against a recording fake. Generics are erased: the framework
+ * treats every notifier uniformly, exactly like storage treats kit drivers.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: heterogeneous kit drivers erased to one runtime shape (same pattern as queue's JobList)
+export type KitNotificationDriver = NotificationDriverDefinition<string, any, any, any, any>;
+
 export interface NotificationsServiceOptions {
   readonly mailer: Mailer;
   readonly store: DatabaseChannelStore;
@@ -171,11 +275,24 @@ export interface NotificationsServiceOptions {
   readonly definitions?: readonly AnyNotificationDefinition[];
   /** The queue job `sendQueued` dispatches; defaults to `defineNotificationJob()`. */
   readonly job?: JobDefinition<NotificationJobPayload, NotificationJobResult>;
+  /**
+   * The `notifications.providers` section: the notifykit provider backing each
+   * kit channel (`push`/`messaging`). Optional — existing email/database-only
+   * apps need none; a send selecting a kit channel without its provider fails
+   * with `NOTIFICATION_PROVIDER_UNAVAILABLE`.
+   */
+  readonly providers?: NotificationsProvidersConfig;
+  /** Custom notifykit driver definitions passed through to `createNotifier` (notifykit's testing fake, app-registered custom providers). */
+  readonly kitProviders?: readonly KitNotificationDriver[];
 }
 
 export interface NotificationsProviderOptions {
   readonly definitions?: readonly AnyNotificationDefinition[];
   readonly job?: JobDefinition<NotificationJobPayload, NotificationJobResult>;
+  /** The `notifications.providers` section (see {@link NotificationsServiceOptions.providers}). */
+  readonly providers?: NotificationsProvidersConfig;
+  /** Custom notifykit driver definitions passed through to `createNotifier`. */
+  readonly kitProviders?: readonly KitNotificationDriver[];
 }
 
 export interface SendQueuedOptions {

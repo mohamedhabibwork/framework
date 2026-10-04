@@ -2,7 +2,14 @@ import type { JsonObject, JsonValue } from '@framework/core';
 import { mailAddressSchema } from '@framework/mail';
 import { z } from 'zod/v4';
 import { NotificationValidationError } from './errors';
-import type { DatabaseContent, EmailContent, NotificationEnvelope, NotificationFieldError } from './types';
+import type {
+  DatabaseContent,
+  EmailContent,
+  MessagingContent,
+  NotificationEnvelope,
+  NotificationFieldError,
+  PushContent,
+} from './types';
 
 const jsonValue: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValue), z.record(z.string(), jsonValue)]),
@@ -14,14 +21,19 @@ const jsonRecord: z.ZodType<JsonObject> = z.record(z.string(), jsonValue);
  * The validated envelope: at least one channel, a recipient, and a JSON
  * payload. The email channel additionally requires `to` to be a valid email
  * address (same address rule as `@framework/mail`); the planned `sms` channel
- * (see `SMS_PLANNED`) and any unknown channel are rejected here.
+ * (see `SMS_PLANNED`) and any unknown channel are rejected here. For the
+ * `push`/`messaging` channels the envelope stays provider-agnostic: `to` is
+ * the string target (device token, chat id, channel id) and `native` is a
+ * loosely validated passthrough object forwarded to the notifykit provider —
+ * the provider-specific typing lives in `notifications.providers`, never here.
  */
 export const notificationEnvelopeSchema: z.ZodType<NotificationEnvelope> = z
   .object({
     name: z.string().trim().min(1, 'Name is required').max(255),
-    channels: z.array(z.enum(['email', 'database'])).min(1, 'At least one channel is required'),
+    channels: z.array(z.enum(['email', 'database', 'push', 'messaging'])).min(1, 'At least one channel is required'),
     to: z.string().trim().min(1, 'Recipient is required'),
     payload: jsonRecord,
+    native: jsonRecord.optional(),
   })
   .refine((envelope) => !envelope.channels.includes('email') || mailAddressSchema.safeParse(envelope.to).success, {
     error: 'The email channel requires a valid email recipient',
@@ -44,6 +56,18 @@ export const emailContentSchema: z.ZodType<EmailContent> = z
 export const databaseContentSchema: z.ZodType<DatabaseContent> = z.object({
   title: z.string().trim().min(1, 'Title is required').max(255),
   body: z.string().min(1, 'Body is required'),
+});
+
+/** Push-channel content: body plus optional title, mapped onto notifykit's notification content. */
+export const pushContentSchema: z.ZodType<PushContent> = z.object({
+  title: z.string().trim().min(1, 'Title cannot be empty').max(255).optional(),
+  body: z.string().trim().min(1, 'Body is required'),
+});
+
+/** Messaging-channel content: body plus optional title, mapped onto notifykit's notification content. */
+export const messagingContentSchema: z.ZodType<MessagingContent> = z.object({
+  title: z.string().trim().min(1, 'Title cannot be empty').max(255).optional(),
+  body: z.string().trim().min(1, 'Body is required'),
 });
 
 /** Maps zod issues to 422-style field errors (same projection as `@framework/mail`). */
@@ -74,6 +98,20 @@ export function parseEmailContent(content: EmailContent): EmailContent {
 /** Validates built database content, or throws `NotificationValidationError`. */
 export function parseDatabaseContent(content: DatabaseContent): DatabaseContent {
   const result = databaseContentSchema.safeParse(content);
+  if (!result.success) throw new NotificationValidationError(toNotificationFieldErrors(result.error));
+  return result.data;
+}
+
+/** Validates built push content, or throws `NotificationValidationError`. */
+export function parsePushContent(content: PushContent): PushContent {
+  const result = pushContentSchema.safeParse(content);
+  if (!result.success) throw new NotificationValidationError(toNotificationFieldErrors(result.error));
+  return result.data;
+}
+
+/** Validates built messaging content, or throws `NotificationValidationError`. */
+export function parseMessagingContent(content: MessagingContent): MessagingContent {
+  const result = messagingContentSchema.safeParse(content);
   if (!result.success) throw new NotificationValidationError(toNotificationFieldErrors(result.error));
   return result.data;
 }

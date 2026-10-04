@@ -66,3 +66,19 @@ export class NotificationDeliveryError extends FrameworkError {
     );
   }
 }
+
+/**
+ * NOTIFICATION_PROVIDER_UNAVAILABLE — the notifykit provider configured for a
+ * `push`/`messaging` channel could not be created: the provider type is
+ * unknown or belongs to another channel's family, its peer SDK is not
+ * installed (notifykit loads provider SDKs lazily), or no provider is
+ * configured for a channel the envelope selected. Mirrors storage's
+ * `STORAGE_DRIVER_UNAVAILABLE`: a configuration/infrastructure gap, not a
+ * delivery outcome, so it propagates instead of being recorded as a failed
+ * channel.
+ */
+export class NotificationProviderUnavailableError extends FrameworkError {
+  constructor(message: string, options?: ErrorOptions) {
+    super('NOTIFICATION_PROVIDER_UNAVAILABLE', message, options);
+  }
+}

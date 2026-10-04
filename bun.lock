@@ -189,6 +189,7 @@
         "@framework/core": "workspace:*",
         "@framework/mail": "workspace:*",
         "@framework/queue": "workspace:*",
+        "@mohamedhabibwork/notifykit": "0.4.1",
         "zod": "4.6.5",
       },
       "devDependencies": {
@@ -576,6 +577,8 @@
     "@mohamedhabibwork/cachekit": ["@mohamedhabibwork/cachekit@0.2.1", "", { "peerDependencies": { "redis": "^4.7.0" }, "optionalPeers": ["redis"] }, "sha512-EFv50OWKoub0duQfnobQ/EdDcxOqKJAG6VTm98Kp9MnmNxG8R6RcB3KAkkvZpAD41loyinDK8epV5KhkKx44Cw=="],
 
     "@mohamedhabibwork/loggerkit": ["@mohamedhabibwork/loggerkit@0.2.2", "", { "peerDependencies": { "bunyan": "^1.8.15", "elysia": "^1.1.0", "hono": "^4.6.0", "log4js": "^6.9.1", "loglevel": "^1.9.2", "morgan": "^1.10.0", "roarr": "^7.21.1", "winston": "^3.15.0" }, "optionalPeers": ["bunyan", "elysia", "hono", "log4js", "loglevel", "morgan", "roarr", "winston"] }, "sha512-wtPncrJwExzgmyzqKINDuZ47hzk2Bwnr3dBl1+Ep6EtLx28GKeR+DHkv4ROBMjZBal3HSn3EVIne17mgAuXdSw=="],
+
+    "@mohamedhabibwork/notifykit": ["@mohamedhabibwork/notifykit@0.4.1", "", { "peerDependencies": { "@parse/node-apn": "^6.0.0", "firebase-admin": "^12.0.0 || ^13.0.0", "nodemailer": "^6.9.0 || ^7.0.0", "web-push": "^3.6.0" }, "optionalPeers": ["@parse/node-apn", "firebase-admin", "nodemailer", "web-push"] }, "sha512-dUFeQsiwCoElfANgNC9x9y1QHJQ1k/U6i3JCbaYxjdJMDJauXl07l6Guzsgi8Q2nK0OugsXBYSwzwis6WBum9A=="],
 
     "@mohamedhabibwork/queuekit": ["@mohamedhabibwork/queuekit@0.4.1", "", { "peerDependencies": { "@aws-sdk/client-sqs": "^3.1128.0", "amqplib": "^0.10.9", "bullmq": "^6.3.4", "ioredis": "^5.6.1", "kafkajs": "^2.2.4", "nats": "^2.29.3", "redis": "^6.2.1" }, "optionalPeers": ["@aws-sdk/client-sqs", "amqplib", "bullmq", "ioredis", "kafkajs", "nats", "redis"] }, "sha512-+G+PFo2TiUPkZ5NDvIq0PLeKNVueGz0nOznfLruTyObJYmNlCN12PhmRgrO1pTa+q1GDWFhXXwnbGcJBSOY/Nw=="],
 

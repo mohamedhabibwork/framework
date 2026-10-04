@@ -28,5 +28,13 @@ export function defineNotification<TPayload extends JsonObject>(
       `Notification "${name}" declares the database channel without a toDatabase builder`,
     );
   }
+  if (channels.includes('push') && !definition.toPush) {
+    throw new NotificationDefinitionError(`Notification "${name}" declares the push channel without a toPush builder`);
+  }
+  if (channels.includes('messaging') && !definition.toMessaging) {
+    throw new NotificationDefinitionError(
+      `Notification "${name}" declares the messaging channel without a toMessaging builder`,
+    );
+  }
   return definition;
 }
