@@ -1,0 +1,56 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/docs/**'
+      - 'packages/**/src/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'apps/docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build docs site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Build
+        run: bun run --cwd apps/docs build
+
+  # Free deploy to the existing Cloudflare Worker (framework.habib.cloud).
+  # Activation is deliberate and zero-cost:
+  #   1. Settings → Secrets and variables → Actions → Variables:
+  #      DOC_DEPLOY_ENABLED = true
+  #   2. Secrets: CLOUDFLARE_API_TOKEN (Workers Scripts:Edit permission)
+  # Until both exist, this job skips with a notice — CI stays green.
+  deploy:
+    name: Deploy docs (requires DOC_DEPLOY_ENABLED + CLOUDFLARE_API_TOKEN)
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.DOC_DEPLOY_ENABLED == 'true'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd apps/docs build
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/docs
+          command: deploy

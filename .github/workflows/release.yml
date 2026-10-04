@@ -1,0 +1,37 @@
+name: Release
+
+# A tag push (v0.2.0) — created by `bun run release -- <version>` — publishes
+# a GitHub Release with the matching CHANGELOG section. No build artifacts
+# yet: the framework is consumed as a workspace/pinned source.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub Release from CHANGELOG
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract CHANGELOG section for the tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v header="## [${VERSION}]" '
+            $0 ~ "^## \\[" { found = ($0 ~ header); next }
+            found { print }
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          # Fall back to auto-generated notes when the section is missing.
+          [ -s RELEASE_NOTES.md ] || rm RELEASE_NOTES.md
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f RELEASE_NOTES.md ]; then
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
