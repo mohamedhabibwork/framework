@@ -1,6 +1,6 @@
 import type { JsonObject } from '@framework/core';
 import type { InferSelectModel } from 'drizzle-orm';
-import { bigserial, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigserial, index, jsonb, pgTable, text, timestamp, varchar } from 'drizzle-orm/pg-core';
 import type { AuditAction } from '../mixins/core';
 
 export interface AuditChanges {
@@ -26,11 +26,11 @@ export const auditLogs = pgTable(
   'audit_logs',
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
-    resource: text('resource').notNull(),
+    resource: varchar('resource', { length: 255 }).notNull(),
     resourceId: text('resource_id').notNull(),
-    action: text('action', { enum: AUDIT_ACTIONS }).notNull(),
+    action: varchar('action', { length: 50, enum: AUDIT_ACTIONS }).notNull(),
     actorId: text('actor_id'),
-    actorType: text('actor_type').notNull(),
+    actorType: varchar('actor_type', { length: 50 }).notNull(),
     correlationId: text('correlation_id').notNull(),
     changes: jsonb('changes').$type<AuditChanges>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
