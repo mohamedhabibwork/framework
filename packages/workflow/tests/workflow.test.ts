@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { Application, ExecutionContext, type JsonObject } from '@framework/core';
 import { createConnection, type DatabaseConnection } from '@framework/database';
 import { MemoryEventBus } from '@framework/events';
+import { createHttpKernel, forbidden, type MountAuthorization } from '@framework/http';
 import type { JobWorker } from '@framework/queue';
 import { createTestDatabase, requireTestDatabaseUrl, type TestDatabase } from '@framework/testing';
 import { z } from 'zod/v4';
@@ -14,6 +15,7 @@ import {
   WorkflowEngine,
   WorkflowManager,
   WorkflowStore,
+  workflowRoutes,
 } from '../src';
 
 const databaseUrl = requireTestDatabaseUrl();
@@ -29,6 +31,7 @@ let store: WorkflowStore;
 let manager: WorkflowManager;
 let engine: WorkflowEngine;
 let worker: JobWorker;
+let application: Application<object>;
 const bus = new MemoryEventBus();
 const compensationOrder: string[] = [];
 
@@ -194,7 +197,7 @@ beforeAll(async () => {
     )`;
 
   store = new WorkflowStore(connection.db);
-  const application = new Application({ config: {}, providers: [] });
+  application = new Application({ config: {}, providers: [] });
   const { JobWorker: jobWorkerCtor, QueueManager } = await import('@framework/queue');
   const queue = new QueueManager({ url: redisUrl, prefix: `wf-test-${crypto.randomUUID()}`, queue: 'wf-tests' });
   manager = new WorkflowManager(store, queue, bus);
@@ -351,5 +354,50 @@ describe('Workflow engine (real Postgres + Redis)', () => {
     const page = await manager.list({ page: 1, limit: 10, workflow: 'happy-order', status: 'completed' });
     expect(page.meta.total).toBeGreaterThanOrEqual(1);
     expect(page.items.every((r) => r.workflow === 'happy-order')).toBe(true);
+  });
+});
+
+describe('workflowRoutes mount-time authorization', () => {
+  const stub = {
+    list: async () => ({ items: [], meta: { page: 1, limit: 25, total: 0 } }),
+    dispatch: async () => ({ runId: '00000000-0000-4000-8000-000000000000' }),
+    status: async () => null,
+    retry: async () => false,
+    cancel: async () => false,
+    resume: async () => false,
+  } as unknown as WorkflowManager;
+  const deny = () => {
+    throw forbidden('denied by test guard');
+  };
+  const jsonPost = {
+    method: 'POST',
+    body: '{"workflow":"happy-order"}',
+    headers: { 'content-type': 'application/json' },
+  } as const;
+  const plainPost = { method: 'POST' } as const;
+  // The booted kernel application provides onError (validation → 422) and the
+  // request scope the dispatch handler reads its execution context from.
+  const kernel = (authorize: MountAuthorization) =>
+    createHttpKernel(application, { exposeInternalErrors: false }).route(
+      '/workflow',
+      workflowRoutes({ manager: () => stub, authorize }),
+    );
+
+  test('a denying guard rejects every endpoint with 403 before validation', async () => {
+    const routes = kernel(deny);
+    expect((await routes.request('/workflow?limit=nope')).status).toBe(403);
+    expect((await routes.request('/workflow/dispatch', jsonPost)).status).toBe(403);
+    // An invalid run id would be 422 after validation; the guard runs first.
+    expect((await routes.request('/workflow/not-a-uuid')).status).toBe(403);
+    expect((await routes.request('/workflow/not-a-uuid/retry', jsonPost)).status).toBe(403);
+    expect((await routes.request('/workflow/not-a-uuid/cancel', plainPost)).status).toBe(403);
+    expect((await routes.request('/workflow/not-a-uuid/resume', plainPost)).status).toBe(403);
+  });
+
+  test('an allowing guard serves requests and translates unknown runs to 404', async () => {
+    const routes = kernel(() => {});
+    expect((await routes.request('/workflow')).status).toBe(200);
+    expect((await routes.request('/workflow/dispatch', jsonPost)).status).toBe(202);
+    expect((await routes.request('/workflow/00000000-0000-4000-8000-000000000000')).status).toBe(404);
   });
 });

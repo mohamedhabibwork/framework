@@ -1,5 +1,5 @@
 import { EXECUTION_CONTEXT, type JsonObject } from '@framework/core';
-import { type FrameworkEnv, notFound, resolve } from '@framework/http';
+import { authorizationGuard, type FrameworkEnv, type MountAuthorization, notFound, resolve } from '@framework/http';
 import { validate } from '@framework/validation';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod/v4';
@@ -30,8 +30,13 @@ const dispatchBodySchema = z
 export interface WorkflowRoutesOptions {
   /** Custom manager resolution (default: the container's WORKFLOW_MANAGER). */
   readonly manager?: (c: Context<FrameworkEnv>) => WorkflowManager;
-  /** Endpoint authorization; throw an HttpError (e.g. forbidden()) to deny. */
-  readonly authorize?: (c: Context<FrameworkEnv>) => void | Promise<void>;
+  /**
+   * Required mount-time authorization: a guard that throws an `HttpError`
+   * (e.g. `forbidden()`) to deny, or the explicit `'public'` opt-out.
+   * Typical admin guard: `requireAbility('workflow.admin')` from
+   * `@framework/auth`.
+   */
+  readonly authorize: MountAuthorization;
 }
 
 /**
@@ -46,46 +51,42 @@ export interface WorkflowRoutesOptions {
  * POST /workflow/dispatch       dispatch a registered workflow by name
  * ```
  *
- * The endpoints are unprotected until Phase 3 (auth); mount them behind an
- * admin path and pass `authorize` once guards exist.
+ * Authorization is required at mount time — pass a guard (e.g.
+ * `requireAbility('workflow.admin')`) or the explicit `'public'` opt-out.
+ * The guard runs before validation, so anonymous callers get 401/403 and
+ * never observe schema details.
  */
-export function workflowRoutes(options: WorkflowRoutesOptions = {}): Hono<FrameworkEnv> {
+export function workflowRoutes(options: WorkflowRoutesOptions): Hono<FrameworkEnv> {
   const managerFor = options.manager ?? ((c: Context<FrameworkEnv>) => resolve(c, WORKFLOW_MANAGER));
-  const guard = async (c: Context<FrameworkEnv>): Promise<void> => options.authorize?.(c);
+  const guard = authorizationGuard(options.authorize);
 
   return new Hono<FrameworkEnv>()
-    .get('/', validate('query', workflowQuerySchema), async (c) => {
-      await guard(c);
+    .get('/', guard, validate('query', workflowQuerySchema), async (c) => {
       const page = await managerFor(c).list(c.req.valid('query'));
       return c.json(page, 200);
     })
-    .post('/dispatch', validate('json', dispatchBodySchema), async (c) => {
-      await guard(c);
+    .post('/dispatch', guard, validate('json', dispatchBodySchema), async (c) => {
       const { workflow, input } = c.req.valid('json');
       const execution = resolve(c, EXECUTION_CONTEXT);
       const { runId } = await managerFor(c).dispatch(workflow, (input ?? {}) as JsonObject, execution);
       return c.json({ runId, status: 'dispatched' as const }, 202);
     })
-    .get('/:runId', validate('param', runIdParamSchema), async (c) => {
-      await guard(c);
+    .get('/:runId', guard, validate('param', runIdParamSchema), async (c) => {
       const status = await managerFor(c).status(c.req.valid('param').runId);
       if (!status) throw notFound('Workflow run not found');
       return c.json(status, 200);
     })
-    .post('/:runId/retry', validate('param', runIdParamSchema), validate('json', retryBodySchema), async (c) => {
-      await guard(c);
+    .post('/:runId/retry', guard, validate('param', runIdParamSchema), validate('json', retryBodySchema), async (c) => {
       const done = await managerFor(c).retry(c.req.valid('param').runId, { fromNode: c.req.valid('json').fromNode });
       if (!done) throw notFound('Nothing to retry: run not found or not in a failed state');
       return c.json({ status: 'retried' as const }, 202);
     })
-    .post('/:runId/cancel', validate('param', runIdParamSchema), async (c) => {
-      await guard(c);
+    .post('/:runId/cancel', guard, validate('param', runIdParamSchema), async (c) => {
       const done = await managerFor(c).cancel(c.req.valid('param').runId);
       if (!done) throw notFound('Run not found or already in a terminal state');
       return c.json({ status: 'cancelled' as const }, 202);
     })
-    .post('/:runId/resume', validate('param', runIdParamSchema), async (c) => {
-      await guard(c);
+    .post('/:runId/resume', guard, validate('param', runIdParamSchema), async (c) => {
       const done = await managerFor(c).resume(c.req.valid('param').runId);
       if (!done) throw notFound('Run not found or not waiting');
       return c.json({ status: 'resumed' as const }, 202);

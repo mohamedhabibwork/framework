@@ -2,6 +2,7 @@
 // Convention: every interface/type lives in `./types`, every constant in
 // `./constants`; runtime values (classes, functions, middleware) stay in their modules.
 export { requireAuth } from './authorization/authenticate';
+export { authorizationGuard } from './authorization/guard';
 export { authenticatedPolicy, authorize, denyAll } from './authorization/policy';
 export { currentPrincipal, hasAbility, type PrincipalLike } from './authorization/principal';
 export { ERROR_CATALOG, ERROR_CODES, ERROR_STATUSES, REQUEST_CONTEXT } from './constants';
@@ -20,9 +21,11 @@ export {
   unauthenticated,
   validationFailed,
 } from './errors/http-error';
-export { createHttpKernel } from './kernel';
+export type { KernelCorsOptions } from './kernel';
+export { createHttpKernel, STRICT_SECURE_HEADERS } from './kernel';
 export { MiddlewareRegistry } from './middleware/registry';
 export { requestScope } from './middleware/request-scope';
+export { throttle } from './middleware/throttle';
 export { assertNoDuplicateRoutes, listRoutes } from './routing/routes';
 // Grouped conventions: every type in ./types, every constant in ./constants.
 export type {
@@ -36,8 +39,10 @@ export type {
   FrameworkVariables,
   HttpKernelOptions,
   MiddlewareDescription,
+  MountAuthorization,
   RequestContext,
   ResourceAbility,
   ResourcePolicy,
+  RouteGuard,
   RouteInfo,
 } from './types';
