@@ -21,8 +21,11 @@ let app = SCRATCH;
 const env = () => ({
   ...process.env,
   TEST_DATABASE_URL: requireTestDatabaseUrl(),
-  DATABASE_URL: 'postgres://framework:framework@127.0.0.1:54329/framework',
-  REDIS_URL: 'redis://127.0.0.1:63799',
+  // The spawned CLI needs a *connectable* database (CI's app DATABASE_URL is
+  // deliberately unusable) and the real Redis service — both from the
+  // environment, never hardcoded ports.
+  DATABASE_URL: requireTestDatabaseUrl(),
+  REDIS_URL: process.env.REDIS_URL,
 });
 
 async function cli(args: readonly string[]) {
@@ -74,6 +77,16 @@ describe('queue management (real Redis)', () => {
 });
 
 describe('seeder pipeline (real PostgreSQL)', () => {
+  test('db:fresh drops and re-applies the schema behind the production guard', async () => {
+    // Runs first so the seed tests below always see a migrated schema (CI's
+    // database starts empty).
+    const fresh = await cli(['--json', 'db:fresh']);
+    expect(fresh.code).toBe(0);
+    const body = JSON.parse(fresh.stdout) as { data: { migrations: { applied: boolean }[] } };
+    expect(body.data.migrations.length).toBeGreaterThanOrEqual(3);
+    expect(body.data.migrations.every((migration) => migration.applied)).toBe(true);
+  });
+
   test('db:seed runs the registered playground seeders and is idempotent', async () => {
     const first = await cli(['--json', 'db:seed']);
     expect(first.code).toBe(0);
@@ -86,16 +99,6 @@ describe('seeder pipeline (real PostgreSQL)', () => {
     const unknown = await cli(['--json', 'db:seed', 'nope']);
     expect(unknown.code).toBe(1);
     expect(JSON.parse(unknown.stdout)).toMatchObject({ status: 'error', error: { code: 'SEEDER_UNKNOWN' } });
-  });
-
-  test('db:fresh drops and re-applies the schema behind the production guard', async () => {
-    const fresh = await cli(['--json', 'db:fresh']);
-    expect(fresh.code).toBe(0);
-    const body = JSON.parse(fresh.stdout) as { data: { migrations: { applied: boolean }[] } };
-    expect(body.data.migrations.length).toBeGreaterThanOrEqual(3);
-    expect(body.data.migrations.every((migration) => migration.applied)).toBe(true);
-    // The fresh schema is usable: the seeder inserts again afterwards.
-    expect((await cli(['--json', 'db:seed', 'products'])).code).toBe(0);
   });
 });
 
