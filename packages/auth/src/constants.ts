@@ -2,9 +2,11 @@
 
 export { authConfigSchema, defaultAuthConfig } from './config-schema';
 export {
+  ACCOUNT_TOKEN_STORE,
   AUTH_RATE_LIMITER,
   AUTH_SERVICE,
   PASSWORD_HASHER,
+  RECOVERY_CODE_STORE,
   SESSION_STORE,
   TOKEN_STORE,
   USER_PROVIDER,

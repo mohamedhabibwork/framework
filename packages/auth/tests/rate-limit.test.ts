@@ -104,6 +104,7 @@ beforeAll(async () => {
       email text not null unique,
       email_verified_at timestamptz,
       password_hash text not null,
+      totp_secret text,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now())`;
   await connection.sql`

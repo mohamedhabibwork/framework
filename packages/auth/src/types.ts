@@ -8,7 +8,7 @@ import type { DatabaseConnection, SelectOf } from '@framework/database';
 
 // -- Configuration -----------------------------------------------------------
 
-export type AuthGuardName = 'session' | 'api-token';
+export type AuthGuardName = 'session' | 'api-token' | 'jwt';
 
 /** Validated `auth` section of the application configuration. */
 export interface AuthConfig {
@@ -34,6 +34,22 @@ export interface AuthConfig {
     /** Fixed-window length in seconds; the failure counter expires with it. */
     readonly windowSeconds: number;
   };
+  /** Email-verification token lifetime. */
+  readonly verification: { readonly ttlSeconds: number };
+  /** Password-reset token lifetime. */
+  readonly passwordReset: { readonly ttlSeconds: number };
+  /** Two-step login (TOTP): challenge lifetime and provisioning issuer. */
+  readonly twoStep: { readonly challengeTtlSeconds: number; readonly issuer: string };
+  /**
+   * JWT guard validation. Key material comes from `createAuthProvider({ jwt
+   * })` (inline JWKS) or `jwksUri` (remote, rotation-aware); issuer/audience
+   * are checked when set. The `sub` claim must match a local user id.
+   */
+  readonly jwt: {
+    readonly jwksUri: string;
+    readonly issuer: string;
+    readonly audience: string;
+  };
 }
 
 // -- Records -----------------------------------------------------------------
@@ -46,6 +62,15 @@ export type SessionRecord = Omit<SelectOf<typeof import('./schema/tables').sessi
 
 /** Row of the framework-owned `api_tokens` table (never carries the token hash). */
 export type ApiTokenRecord = Omit<SelectOf<typeof import('./schema/tables').apiTokens>, 'tokenHash'>;
+
+/** Row of the framework-owned `account_tokens` table (never carries the token hash). */
+export type AccountTokenRecord = Omit<SelectOf<typeof import('./schema/tables').accountTokens>, 'tokenHash'>;
+
+/** Row of the framework-owned `totp_recovery_codes` table (never carries the hash). */
+export type TotpRecoveryCodeRecord = Omit<SelectOf<typeof import('./schema/tables').totpRecoveryCodes>, 'codeHash'>;
+
+/** What a single-use account token is for. */
+export type AccountTokenPurpose = 'email-verification' | 'password-reset' | 'two-step';
 
 /** A session row joined with its user, as returned by `SessionStore.find`. */
 export interface ResolvedSession {
@@ -88,6 +113,12 @@ export interface UserProvider {
   findById(id: string): Promise<UserRecord | null>;
   findByEmail(email: string): Promise<UserRecord | null>;
   create(input: { readonly name: string; readonly email: string; readonly passwordHash: string }): Promise<UserRecord>;
+  /** Persists a new password hash (password recovery). */
+  updatePasswordHash(id: string, passwordHash: string): Promise<void>;
+  /** Stamps `email_verified_at` (email verification). */
+  markEmailVerified(id: string): Promise<void>;
+  /** Writes the base32 TOTP secret (null disables two-step login). */
+  setTotpSecret(id: string, secret: string | null): Promise<void>;
 }
 
 export interface IssuedSession {
@@ -148,11 +179,51 @@ export interface AttemptResult {
   readonly sessionToken: string;
 }
 
+/** First factor outcome of `AuthService.startLogin`. */
+export type LoginStart =
+  | ({ readonly kind: 'session' } & AttemptResult)
+  | {
+      readonly kind: 'two-step';
+      readonly user: UserRecord /** Single-use, short-lived challenge token. */;
+      readonly challenge: string;
+    };
+
 export interface IssueTokenInput {
   readonly name: string;
   readonly abilities?: readonly string[];
   /** Overrides the configured default lifetime for this token. */
   readonly ttlSeconds?: number | null;
+}
+
+/**
+ * Single-use account tokens for email verification, password recovery and
+ * the two-step-login challenge: hashed at rest, expiring, consumed
+ * atomically (see `PgAccountTokenStore`).
+ */
+export interface AccountTokenStore {
+  /** Issues a fresh token; returns the plaintext (delivered exactly once). */
+  issue(userId: string, purpose: AccountTokenPurpose, ttlSeconds: number): Promise<string>;
+  /** Atomically consumes a valid token; resolves the owning user id or null. */
+  consume(plaintext: string, purpose: AccountTokenPurpose): Promise<string | null>;
+}
+
+/**
+ * One-time TOTP recovery codes: hashed at rest, single-use under concurrent
+ * replay (see `PgRecoveryCodeStore`).
+ */
+export interface RecoveryCodeStore {
+  replaceAll(userId: string, codes: readonly string[]): Promise<void>;
+  consume(userId: string, code: string): Promise<boolean>;
+  countUnused(userId: string): Promise<number>;
+  deleteAll(userId: string): Promise<void>;
+}
+
+/** Delivery hooks the application wires to `@framework/notifications`. */
+export interface AuthNotifiers {
+  /** Delivers the email-verification link/token (queued by the app). */
+  readonly emailVerification?: (user: UserRecord, token: string) => Promise<void>;
+  /** Delivers the password-reset link/token (queued by the app). */
+  readonly passwordReset?: (user: UserRecord, token: string) => Promise<void>;
 }
 
 /**
@@ -164,14 +235,39 @@ export interface AuthServiceDeps {
   readonly users: UserProvider;
   readonly sessions: SessionStore;
   readonly tokens: ApiTokenStore;
+  /** Single-use verification/recovery/two-step tokens (optional until wired). */
+  readonly accountTokens?: AccountTokenStore;
+  /** One-time TOTP recovery codes (optional until wired). */
+  readonly recoveryCodes?: RecoveryCodeStore;
+  /** App delivery hooks for verification/recovery emails (optional). */
+  readonly notifiers?: AuthNotifiers;
   readonly sessionTtlSeconds: number;
   readonly tokenTtlSeconds: number | null;
+  /** Lifetime of email-verification tokens. Default 3600. */
+  readonly verificationTtlSeconds?: number;
+  /** Lifetime of password-reset tokens. Default 3600. */
+  readonly resetTtlSeconds?: number;
+  /** Lifetime of the two-step login challenge. Default 300. */
+  readonly twoStepChallengeTtlSeconds?: number;
+  /** Issuer shown in `otpauth://` provisioning URIs. Default 'Framework'. */
+  readonly totpIssuer?: string;
 }
 
 /** Options for `createAuthProvider` (see provider.ts). */
 export interface AuthProviderOptions {
   /** Connection token to build stores on; defaults to `DATABASE`. */
   readonly connection?: Token<DatabaseConnection>;
+  /** Delivery hooks handed to the `AuthService` (queued by the app via `@framework/notifications`). */
+  readonly notifiers?: AuthNotifiers;
+  /**
+   * JWT guard key material and algorithm allowlist, used when `auth.guards`
+   * includes `'jwt'`. Without it (and without `auth.jwt.jwksUri`) the guard
+   * fails loudly on first use.
+   */
+  readonly jwt?: {
+    readonly keys?: import('./jwt-guard').JwtKeySource;
+    readonly algorithms?: readonly import('./jwt-guard').JwtAlgorithm[];
+  };
 }
 
 /** Options for `createAuthActorResolver` (see guard.ts). */

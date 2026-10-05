@@ -13,6 +13,8 @@ export const users = pgTable('users', {
   email: text('email').notNull().unique(),
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true, mode: 'string' }),
   passwordHash: text('password_hash').notNull(),
+  /** Base32 TOTP shared secret; null until the user enables two-step login. */
+  totpSecret: text('totp_secret'),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' })
     .notNull()
@@ -74,3 +76,52 @@ export const apiTokens = pgTable(
 export type UserRow = InferSelectModel<typeof users>;
 export type SessionRow = InferSelectModel<typeof sessions>;
 export type ApiTokenRow = InferSelectModel<typeof apiTokens>;
+
+/**
+ * Single-use account tokens for email verification and password recovery.
+ * The plaintext is shown/delivered once; only its SHA-256 hash is stored.
+ * `consumedAt` makes every token single-use — a replay after consumption
+ * misses the SQL guard and resolves to nothing.
+ */
+export const accountTokens = pgTable(
+  'account_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** `'email-verification' | 'password-reset'` (checked in SQL, not FK-enforced). */
+    purpose: text('purpose').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'string' }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date().toISOString()),
+  },
+  (table) => [index('account_tokens_user_id_idx').on(table.userId)],
+);
+
+/** One-time TOTP recovery codes; only their SHA-256 hashes are stored. */
+export const totpRecoveryCodes = pgTable(
+  'totp_recovery_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull().unique(),
+    usedAt: timestamp('used_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date().toISOString()),
+  },
+  (table) => [index('totp_recovery_codes_user_id_idx').on(table.userId)],
+);
+
+export type AccountTokenRow = InferSelectModel<typeof accountTokens>;
+export type TotpRecoveryCodeRow = InferSelectModel<typeof totpRecoveryCodes>;

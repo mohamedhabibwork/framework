@@ -77,8 +77,29 @@ beforeAll(async () => {
       email text not null unique,
       email_verified_at timestamptz,
       password_hash text not null,
+      totp_secret text,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now())`;
+  await connection.sql`
+    create table account_tokens (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references users(id) on delete cascade,
+      purpose text not null,
+      token_hash text not null unique,
+      expires_at timestamptz not null,
+      consumed_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now())`;
+  await connection.sql`create index account_tokens_user_id_idx on account_tokens (user_id)`;
+  await connection.sql`
+    create table totp_recovery_codes (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references users(id) on delete cascade,
+      code_hash text not null unique,
+      used_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now())`;
+  await connection.sql`create index totp_recovery_codes_user_id_idx on totp_recovery_codes (user_id)`;
   await connection.sql`
     create table sessions (
       id uuid primary key default gen_random_uuid(),

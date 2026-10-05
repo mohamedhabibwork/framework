@@ -2,11 +2,22 @@ import { type Actor, ANONYMOUS_ACTOR } from '@framework/core';
 import type { ActorResolver } from '@framework/http';
 import { getCookie } from 'hono/cookie';
 import { SESSION_TOUCH_INTERVAL_MS } from './constants';
-import type { AuthGuardDeps, Principal } from './types';
+import { createJwtPrincipalResolver, type JwtAlgorithm, type JwtKeySource } from './jwt-guard';
+import type { AuthGuardDeps, Principal, UserProvider } from './types';
 
 const THROTTLE_MS = SESSION_TOUCH_INTERVAL_MS;
 
 const toActor = (principal: Principal): Actor => ({ id: principal.id, type: 'user' });
+
+/** Guard-specific material beyond config and the DB stores. */
+export interface AuthGuardExtras {
+  /** Inline JWT key material (remote `jwksUri` comes from config instead). */
+  readonly jwtKeys?: JwtKeySource;
+  /** Verify allowlist; defaults to RS256/ES256/PS256/EdDSA. */
+  readonly jwtAlgorithms?: readonly JwtAlgorithm[];
+  /** Principal loader for the JWT guard (defaults to the bound USER_PROVIDER). */
+  readonly users?: UserProvider;
+}
 
 /**
  * Authenticates the request before its scope is created (the kernel calls
@@ -15,9 +26,10 @@ const toActor = (principal: Principal): Actor => ({ id: principal.id, type: 'use
  * identity. Installs the full `Principal` on the context for policies.
  *
  * Guards are consulted in config order (default: session cookie, then
- * Bearer token); the first match wins. One lookup per request.
+ * Bearer token; `jwt` adds stateless RS/ES/PS/EdDSA verification over a
+ * JWKS); the first match wins. One lookup per request.
  */
-export function createAuthActorResolver(deps: AuthGuardDeps): ActorResolver {
+export function createAuthActorResolver(deps: AuthGuardDeps, extras: AuthGuardExtras = {}): ActorResolver {
   const { config, sessions, tokens } = deps;
 
   const resolveSession = async (cookieValue: string | undefined): Promise<Principal | null> => {
@@ -51,12 +63,34 @@ export function createAuthActorResolver(deps: AuthGuardDeps): ActorResolver {
     };
   };
 
+  // Built lazily so apps without the jwt guard never touch jose key setup —
+  // and so a misconfigured jwt guard fails loudly on first use, not silently.
+  let resolveJwt: ((header: string | undefined) => Promise<Principal | null>) | undefined;
+  const jwtFor = (): ((header: string | undefined) => Promise<Principal | null>) => {
+    if (!resolveJwt) {
+      if (!extras.users) throw new Error('auth guard "jwt" requires a user provider (extras.users)');
+      resolveJwt = createJwtPrincipalResolver({
+        config: config.jwt,
+        keys: {
+          jwksUri: config.jwt.jwksUri || undefined,
+          jwks: extras.jwtKeys?.jwks,
+          cooldownDurationMs: extras.jwtKeys?.cooldownDurationMs,
+        },
+        users: extras.users,
+        algorithms: extras.jwtAlgorithms,
+      });
+    }
+    return resolveJwt;
+  };
+
   return async (c) => {
     for (const guard of config.guards) {
       const principal =
         guard === 'session'
           ? await resolveSession(getCookie(c, config.session.cookie))
-          : await resolveToken(c.req.header('authorization'));
+          : guard === 'jwt'
+            ? await jwtFor()(c.req.header('authorization'))
+            : await resolveToken(c.req.header('authorization'));
       if (principal) {
         c.set('principal', principal);
         return toActor(principal);

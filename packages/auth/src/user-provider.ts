@@ -30,4 +30,16 @@ export class DatabaseUserProvider implements UserProvider {
     if (!user) throw new Error('User insert returned no row');
     return user;
   }
+
+  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.connection.db.update(users).set({ passwordHash }).where(eq(users.id, id));
+  }
+
+  async markEmailVerified(id: string): Promise<void> {
+    await this.connection.db.update(users).set({ emailVerifiedAt: new Date().toISOString() }).where(eq(users.id, id));
+  }
+
+  async setTotpSecret(id: string, secret: string | null): Promise<void> {
+    await this.connection.db.update(users).set({ totpSecret: secret }).where(eq(users.id, id));
+  }
 }

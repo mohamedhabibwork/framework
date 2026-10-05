@@ -7,7 +7,7 @@ import type { AuthConfig } from './types';
  */
 export const authConfigSchema = z.object({
   guards: z
-    .array(z.enum(['session', 'api-token']))
+    .array(z.enum(['session', 'api-token', 'jwt']))
     .min(1)
     .default(['session', 'api-token']),
   session: z
@@ -39,6 +39,40 @@ export const authConfigSchema = z.object({
       maxAttempts: z.number().int().min(1).default(5),
       /** Fixed-window length in seconds; the failure counter expires with it. */
       windowSeconds: z.number().int().min(1).default(60),
+    })
+    .prefault({}),
+  /** Email-verification tokens. */
+  verification: z
+    .object({
+      /** Lifetime of a verification token, in seconds. */
+      ttlSeconds: z.number().int().positive().default(3600),
+    })
+    .prefault({}),
+  /** Password-recovery tokens. */
+  passwordReset: z
+    .object({
+      /** Lifetime of a reset token, in seconds. */
+      ttlSeconds: z.number().int().positive().default(3600),
+    })
+    .prefault({}),
+  /** Two-step login (TOTP, RFC 6238). */
+  twoStep: z
+    .object({
+      /** Lifetime of the single-use post-password challenge, in seconds. */
+      challengeTtlSeconds: z.number().int().positive().default(300),
+      /** Issuer shown in `otpauth://` provisioning URIs. */
+      issuer: z.string().min(1).default('Framework'),
+    })
+    .prefault({}),
+  /** JWT guard validation (key material comes from the provider options). */
+  jwt: z
+    .object({
+      /** Remote JWKS endpoint; rotation-aware (unknown `kid`s refetch). */
+      jwksUri: z.url().default(''),
+      /** Expected `iss` claim; empty skips the check. */
+      issuer: z.string().min(1).default(''),
+      /** Expected `aud` claim; empty skips the check. */
+      audience: z.string().min(1).default(''),
     })
     .prefault({}),
 });
