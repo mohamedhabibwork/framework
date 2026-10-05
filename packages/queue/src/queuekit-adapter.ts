@@ -171,6 +171,34 @@ export class QueueKitAdapter {
     return true;
   }
 
+  /** Removes one failed-job record; false when it no longer exists or is not failed. */
+  async forget(id: string): Promise<boolean> {
+    const job = await this.queue.getJob(id);
+    if (!job || (await job.getState()) !== 'failed') return false;
+    await job.remove();
+    return true;
+  }
+
+  /** Re-queues up to `limit` failed jobs oldest-first; returns how many were replayed. */
+  async retryAll(limit: number): Promise<number> {
+    const jobs = await this.queue.getFailed(0, Math.max(0, limit - 1));
+    let replayed = 0;
+    for (const job of jobs) {
+      if ((await job.getState()) === 'failed') {
+        await job.retry('failed');
+        replayed += 1;
+      }
+    }
+    return replayed;
+  }
+
+  /** Removes failed/completed records older than `graceMs`; returns how many were removed. */
+  async prune(graceMs: number): Promise<number> {
+    const failed = await this.queue.clean(graceMs, 1_000, 'failed');
+    const completed = await this.queue.clean(graceMs, 1_000, 'completed');
+    return failed.length + completed.length;
+  }
+
   counts(): Promise<Readonly<Record<string, number>>> {
     return this.queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed');
   }

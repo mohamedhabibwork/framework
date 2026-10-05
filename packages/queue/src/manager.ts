@@ -263,6 +263,21 @@ export class QueueManager {
     return this.transport.retry(id);
   }
 
+  /** Removes one failed-job record; false when it no longer exists. */
+  async forget(id: string): Promise<boolean> {
+    return this.transport.forget(id);
+  }
+
+  /** Re-queues up to `limit` failed jobs oldest-first; returns how many were replayed. */
+  async retryAll(limit = 100): Promise<number> {
+    return this.transport.retryAll(limit);
+  }
+
+  /** Removes failed/completed records older than `graceMs`; returns how many were removed. */
+  async prune(graceMs: number): Promise<number> {
+    return this.transport.prune(graceMs);
+  }
+
   async counts(): Promise<Readonly<Record<string, number>>> {
     return this.transport.counts();
   }
