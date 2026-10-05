@@ -2,7 +2,14 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type ExecutionContext, FrameworkError, type JsonObject, type JsonValue, type Token } from '@framework/core';
 import { createDomainEvent, EVENT_BUS } from '@framework/events';
-import { badRequest, type FrameworkEnv, notFound, serviceUnavailable } from '@framework/http';
+import {
+  authorizationGuard,
+  badRequest,
+  type FrameworkEnv,
+  type MountAuthorization,
+  notFound,
+  serviceUnavailable,
+} from '@framework/http';
 import { type DispatchOptions, defineJob, type JobContext, type JobDefinition, type JobStatus } from '@framework/queue';
 import { validate } from '@framework/validation';
 import { type Context, Hono } from 'hono';
@@ -186,6 +193,58 @@ export class LocalExportStore implements ExportStore {
   }
 }
 
+/**
+ * The slice of `@framework/storage`'s `StorageDisk` this store needs,
+ * declared structurally so no package dependency is added: any disk (local,
+ * s3, r2, minio, …) satisfies it.
+ */
+export interface ArtifactDisk {
+  put(path: string, data: string | Uint8Array): Promise<void>;
+  get(path: string): Promise<{ readonly content: Uint8Array }>;
+  exists(path: string): Promise<boolean>;
+}
+
+/** Object name inside the disk for one export artifact (metadata rides in-object). */
+const artifactPath = (jobId: string): string => {
+  if (!JOB_ID.test(jobId)) throw new FrameworkError('EXPORT_ID_INVALID', 'Invalid export job id');
+  return `exports/${jobId.replace(/[^A-Za-z0-9._-]/g, '_')}.json`;
+};
+
+/**
+ * Shared-store export artifacts for multi-node deployments: workers and web
+ * nodes exchange exports through a `@framework/storage` disk (s3/r2/minio on
+ * one node, read by another). The artifact name is stored alongside the
+ * content in one JSON object, so a single key holds the whole export.
+ */
+export class DiskExportStore implements ExportStore {
+  constructor(private readonly disk: ArtifactDisk) {}
+
+  async write(jobId: string, name: string, content: string): Promise<void> {
+    await this.disk.put(artifactPath(jobId), JSON.stringify({ name, content } satisfies StoredExport));
+  }
+
+  async fetch(jobId: string): Promise<StoredExport | null> {
+    const path = artifactPath(jobId);
+    if (!(await this.disk.exists(path))) return null;
+    const file = await this.disk.get(path);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(file.content));
+    } catch {
+      throw new FrameworkError('EXPORT_ARTIFACT_INVALID', `Export artifact ${jobId} is malformed`);
+    }
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      typeof (parsed as StoredExport).name !== 'string' ||
+      typeof (parsed as StoredExport).content !== 'string'
+    ) {
+      throw new FrameworkError('EXPORT_ARTIFACT_INVALID', `Export artifact ${jobId} is malformed`);
+    }
+    return parsed as StoredExport;
+  }
+}
+
 export interface ExportJobSpec<
   TEntity extends ResourceEntity,
   TCreate extends JsonObject,
@@ -351,7 +410,14 @@ export const jobIdParamSchema = z.object({ jobId: z.string().regex(JOB_ID) }).st
 export interface DataRoutesOptions {
   readonly porter: (c: Context<FrameworkEnv>) => DataPorter;
   readonly execution: (c: Context<FrameworkEnv>) => ExecutionContext;
-  readonly authorize?: (c: Context<FrameworkEnv>) => void | Promise<void>;
+  /**
+   * Required mount-time authorization: a guard that throws an `HttpError`
+   * (e.g. `forbidden()`) to deny, or the explicit `'public'` opt-out.
+   * Typical guards: `requireAuth()` for any authenticated user or
+   * `requireAbility('data.import')` for finer control (both from
+   * `@framework/auth`).
+   */
+  readonly authorize: MountAuthorization;
 }
 
 /**
@@ -364,11 +430,15 @@ export interface DataRoutesOptions {
  * GET  /export/status/:jobId   job state
  * GET  /export/download/:jobId the finished artifact
  * ```
+ *
+ * Authorization is required at mount time — pass a guard or the explicit
+ * `'public'` opt-out; the guard runs before validation, so anonymous callers
+ * get 401/403 and never observe schema details.
  */
 export function importExportRoutes(options: DataRoutesOptions): Hono<FrameworkEnv> {
+  const guard = authorizationGuard(options.authorize);
   return new Hono<FrameworkEnv>()
-    .post('/import', validate('json', importRequestSchema), async (c) => {
-      await options.authorize?.(c);
+    .post('/import', guard, validate('json', importRequestSchema), async (c) => {
       const body = c.req.valid('json');
       const result = await options
         .porter(c)
@@ -380,14 +450,12 @@ export function importExportRoutes(options: DataRoutesOptions): Hono<FrameworkEn
         });
       return c.json({ jobId: result.jobId, status: 'dispatched' }, 202, { location: `/import/status/${result.jobId}` });
     })
-    .get('/import/status/:jobId', validate('param', jobIdParamSchema), async (c) => {
-      await options.authorize?.(c);
+    .get('/import/status/:jobId', guard, validate('param', jobIdParamSchema), async (c) => {
       const status = await options.porter(c).status(c.req.valid('param').jobId);
       if (!status) throw notFound('Unknown import job');
       return c.json(status, 200);
     })
-    .post('/export', validate('json', exportRequestSchema), async (c) => {
-      await options.authorize?.(c);
+    .post('/export', guard, validate('json', exportRequestSchema), async (c) => {
       const body = c.req.valid('json');
       const result = await options
         .porter(c)
@@ -399,14 +467,12 @@ export function importExportRoutes(options: DataRoutesOptions): Hono<FrameworkEn
         });
       return c.json({ jobId: result.jobId, status: 'dispatched' }, 202, { location: `/export/status/${result.jobId}` });
     })
-    .get('/export/status/:jobId', validate('param', jobIdParamSchema), async (c) => {
-      await options.authorize?.(c);
+    .get('/export/status/:jobId', guard, validate('param', jobIdParamSchema), async (c) => {
       const status = await options.porter(c).status(c.req.valid('param').jobId);
       if (!status) throw notFound('Unknown export job');
       return c.json(status, 200);
     })
-    .get('/export/download/:jobId', validate('param', jobIdParamSchema), async (c) => {
-      await options.authorize?.(c);
+    .get('/export/download/:jobId', guard, validate('param', jobIdParamSchema), async (c) => {
       const stored = await options.porter(c).download(c.req.valid('param').jobId);
       if (!stored.name.endsWith('.csv') && !stored.name.endsWith('.json')) throw badRequest('Unsupported artifact');
       const type = stored.name.endsWith('.csv') ? 'text/csv' : 'application/json';

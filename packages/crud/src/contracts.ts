@@ -1,5 +1,6 @@
 import type { JsonObject, JsonValue } from '@framework/core';
 import type { Page, PageMeta, PageRequest, QueryOptions } from '@framework/database';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
 /** Primary keys the CRUD layer supports (single-column, string or number). */
 export type EntityId = string | number;
@@ -36,6 +37,12 @@ export interface CrudRepository<
   delete(id: TEntity['id']): Promise<boolean>;
   restore?(id: TEntity['id']): Promise<boolean>;
   batches?(size: number, query?: QueryOptions): AsyncGenerator<readonly TEntity[], void, undefined>;
+  /**
+   * Column reference for query-side scoping (ownership filters). Framework
+   * mixin repositories provide it; optional so custom repositories without
+   * it stay valid (they just cannot be ownership-scoped).
+   */
+  column?(field: string): AnyPgColumn | undefined;
 }
 
 /** Rows accepted by the CSV/JSON import pipeline. */

@@ -14,6 +14,7 @@ import {
   DATABASE,
   type DatabaseConnection,
   type DataContext,
+  Deletable,
   Readable,
   RepositoryCore,
   SoftDeletable,
@@ -22,7 +23,7 @@ import {
   Updatable,
 } from '@framework/database';
 import { type DomainEvent, EVENT_BUS, MemoryEventBus } from '@framework/events';
-import { createHttpKernel, type FrameworkEnv, resolve } from '@framework/http';
+import { createHttpKernel, type FrameworkEnv, forbidden, resolve } from '@framework/http';
 import { createTestDatabase, requireTestDatabaseUrl, type TestDatabase } from '@framework/testing';
 import { integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import type { Hono } from 'hono';
@@ -32,13 +33,14 @@ import { ResourceController } from '../src/controller';
 import { csvToObjects, parseCsv } from '../src/csv';
 import {
   DataPorter,
+  DiskExportStore,
   defineExportJob,
   defineImportJob,
   importExportRoutes,
   LocalExportStore,
   type PorterQueue,
 } from '../src/import-export';
-import { ResourceService, type ServiceContext } from '../src/service';
+import { ownedBy, ResourceService, type ServiceContext } from '../src/service';
 
 const items = pgTable('items', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -103,6 +105,7 @@ beforeAll(async () => {
   connection = createConnection({ url: database.url, maxConnections: 4 });
   await connection.sql`create extension if not exists "pgcrypto"`;
   await connection.sql`create table items (id uuid primary key default gen_random_uuid(), name text not null, price integer not null default 0, deleted_at timestamptz)`;
+  await connection.sql`create table docs (id uuid primary key default gen_random_uuid(), user_id uuid not null, title text not null)`;
   await connection.sql`create table audit_logs (
     id bigserial primary key, resource text not null, resource_id text not null, action text not null,
     actor_id text, actor_type text not null, correlation_id text not null, changes jsonb not null,
@@ -336,7 +339,7 @@ describe('audit and data endpoints over HTTP', () => {
   test('audit trail list, filters, entry lookup and validation', async () => {
     const http: Hono<FrameworkEnv> = createHttpKernel(application, { exposeInternalErrors: false }).route(
       '/audit',
-      auditRoutes(),
+      auditRoutes({ authorize: 'public' }),
     );
     expect((await http.request('/audit?resource=items&limit=5')).status).toBe(200);
     expect((await http.request('/audit?resource=items&action=updated')).status).toBe(200);
@@ -358,7 +361,11 @@ describe('audit and data endpoints over HTTP', () => {
     });
     const http: Hono<FrameworkEnv> = createHttpKernel(application, { exposeInternalErrors: false }).route(
       '/data',
-      importExportRoutes({ porter: () => porter, execution: (c) => resolve(c, EXECUTION_CONTEXT) }),
+      importExportRoutes({
+        porter: () => porter,
+        execution: (c) => resolve(c, EXECUTION_CONTEXT),
+        authorize: 'public',
+      }),
     );
     expect(
       (
@@ -381,5 +388,160 @@ describe('audit and data endpoints over HTTP', () => {
     expect((await http.request('/data/export/download/unknown-job')).status).toBe(404);
     expect((await http.request('/data/import/status/bad id!')).status).toBe(422);
     await rm(join(tmpdir(), 'fw-crud-none'), { recursive: true, force: true });
+  });
+
+  test('mount-time guards deny before validation (403 beats 422) and allow on pass', async () => {
+    const deny = () => {
+      throw forbidden('denied by test guard');
+    };
+    const porter = new DataPorter({
+      queue: refusingQueue,
+      store: new LocalExportStore(join(tmpdir(), 'fw-crud-guard')),
+      imports: [],
+      exports: [],
+    });
+    const http: Hono<FrameworkEnv> = createHttpKernel(application, { exposeInternalErrors: false })
+      .route('/audit', auditRoutes({ authorize: deny }))
+      .route(
+        '/data',
+        importExportRoutes({
+          porter: () => porter,
+          execution: (c) => resolve(c, EXECUTION_CONTEXT),
+          authorize: deny,
+        }),
+      );
+    // Guard runs before validation, so these would be 422/404 unguarded.
+    expect((await http.request('/audit?resource=')).status).toBe(403);
+    expect((await http.request('/audit/99999999')).status).toBe(403);
+    expect((await http.request('/data/export/download/whatever')).status).toBe(403);
+    expect(
+      (
+        await http.request('/data/import', {
+          method: 'POST',
+          body: '{}',
+          headers: { 'content-type': 'application/json' },
+        })
+      ).status,
+    ).toBe(403);
+
+    const allowed = createHttpKernel(application, { exposeInternalErrors: false })
+      .route('/audit', auditRoutes({ authorize: () => {} }))
+      .route(
+        '/data',
+        importExportRoutes({
+          porter: () => porter,
+          execution: (c) => resolve(c, EXECUTION_CONTEXT),
+          authorize: () => {},
+        }),
+      );
+    expect((await allowed.request('/audit?resource=items&limit=1')).status).toBe(200);
+    expect((await allowed.request('/data/export/download/unknown-job')).status).toBe(404);
+    await rm(join(tmpdir(), 'fw-crud-guard'), { recursive: true, force: true });
+  });
+});
+
+describe('ownership (ownedBy row scoping)', () => {
+  const docs = pgTable('docs', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    title: text('title').notNull(),
+  });
+
+  type Doc = {
+    readonly id: string;
+    readonly userId: string;
+    readonly title: string;
+  };
+
+  type DocCreate = {
+    readonly title: string;
+  };
+
+  class DocsRepository extends Deletable(Updatable(Creatable(Readable(RepositoryCore<typeof docs>)))) {}
+  class DocsService extends ResourceService<Doc, DocCreate> {}
+
+  const ALICE_ID = '11111111-1111-4111-8111-111111111111';
+  // Lazily built: `connection` only exists after beforeAll.
+  const asUser = (id: string | null) => ({
+    execution: new ExecutionContext('request', 'corr-own', { id, type: id ? 'user' : 'anonymous' }),
+    transactions: new TransactionContext(connection.db),
+  });
+
+  const ownedService = (id: string | null) => {
+    const scope = asUser(id);
+    return new DocsService(new DocsRepository(docs, scope), scope, { ownership: ownedBy('userId') });
+  };
+
+  test('creates stamp the acting user as the owner; listings only show their rows', async () => {
+    const aliceDocs = ownedService(ALICE_ID);
+    const bobDocs = ownedService('22222222-2222-4222-8222-222222222222');
+
+    const mine = await aliceDocs.create({ title: 'alice doc' });
+    expect(mine.userId).toBe(ALICE_ID);
+    await aliceDocs.create({ title: 'alice doc 2' });
+
+    const alicePage = await aliceDocs.list({ page: 1, limit: 10 });
+    expect(alicePage.items.length).toBe(2);
+    expect(alicePage.items.every((doc) => doc.userId === ALICE_ID)).toBe(true);
+    expect((await bobDocs.list({ page: 1, limit: 10 })).items).toEqual([]);
+  });
+
+  test("another owner's row is 404 for get, update and delete", async () => {
+    const aliceDocs = ownedService(ALICE_ID);
+    const bobDocs = ownedService('22222222-2222-4222-8222-222222222222');
+    const foreign = (await aliceDocs.list({ page: 1, limit: 1 })).items[0];
+    if (!foreign) throw new Error('expected a seeded row');
+    const foreignId = foreign.id;
+
+    await expect(bobDocs.get(foreignId)).rejects.toMatchObject({ status: 404 });
+    await expect(bobDocs.update(foreignId, { title: 'hijacked' })).rejects.toMatchObject({ status: 404 });
+    await expect(bobDocs.delete(foreignId)).rejects.toMatchObject({ status: 404 });
+    // The row survived all three attempts untouched.
+    expect((await aliceDocs.get(foreignId)).title).not.toBe('hijacked');
+  });
+
+  test('a scope without a user id sees nothing and cannot create owned rows', async () => {
+    const anonymous = ownedService(null);
+    expect((await anonymous.list({ page: 1, limit: 10 })).items).toEqual([]);
+    await expect(anonymous.create({ title: 'ghost' })).rejects.toMatchObject({ code: 'OWNERSHIP_ACTOR_MISSING' });
+  });
+
+  test('import stamps every row with the acting user', async () => {
+    const aliceDocs = ownedService(ALICE_ID);
+    const summary = await aliceDocs.import([{ title: 'imported 1' }, { title: 'imported 2' }]);
+    expect(summary.created).toBe(2);
+    const page = await aliceDocs.list({ page: 1, limit: 10 });
+    expect(page.items.filter((doc) => doc.title.startsWith('imported'))).toHaveLength(2);
+  });
+});
+
+describe('DiskExportStore (multi-node artifacts)', () => {
+  /** In-memory stand-in for any @framework/storage disk. */
+  const memoryDisk = () => {
+    const objects = new Map<string, string>();
+    return {
+      objects,
+      put: async (path: string, data: string | Uint8Array) => {
+        objects.set(path, typeof data === 'string' ? data : new TextDecoder().decode(data));
+      },
+      get: async (path: string) => ({ content: new TextEncoder().encode(objects.get(path) ?? '') }),
+      exists: async (path: string) => objects.has(path),
+    };
+  };
+
+  test('write then fetch round-trips through one object key; unknown ids are null', async () => {
+    const disk = memoryDisk();
+    const store = new DiskExportStore(disk);
+    await store.write('export-9', 'products.csv', 'id,name\n1,thing');
+
+    expect(disk.objects.size).toBe(1); // one key: name rides inside the artifact
+    expect(await store.fetch('export-9')).toEqual({ name: 'products.csv', content: 'id,name\n1,thing' });
+    expect(await store.fetch('export-unknown')).toBeNull();
+  });
+
+  test('a malformed artifact fails with a catalogued error', async () => {
+    const disk = memoryDisk();
+    await disk.put('exports/broken.json', '{not json');
+    await expect(new DiskExportStore(disk).fetch('broken')).rejects.toMatchObject({ code: 'EXPORT_ARTIFACT_INVALID' });
   });
 });

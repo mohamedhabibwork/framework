@@ -94,6 +94,11 @@ export class RepositoryCore<TTable extends CrudTable> {
     return [];
   }
 
+  /** Column reference by property name (ownership scoping, sort specs). */
+  column(field: string): AnyPgColumn | undefined {
+    return (this.table as unknown as Readonly<Record<string, AnyPgColumn>>)[field];
+  }
+
   /** Scope filters, soft-delete exclusion and any extra conditions. */
   visibleWhere(extra: readonly SQL[] = []): SQL | undefined {
     const conditions = [...this.scopeConditions(), ...extra];

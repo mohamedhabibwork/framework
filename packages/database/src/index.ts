@@ -12,6 +12,10 @@ export {
   DEFAULT_PAGINATION,
   TRANSACTION_CONTEXT,
 } from './constants';
+// Grouped conventions: every interface/type lives in `./types`, every constant in
+// `./constants`; runtime values stay in their modules.
+export type { Factory, SeedContext, Seeder } from './factories';
+export { defineFactory, defineSeeder } from './factories';
 export { migrationStatus, runMigrations } from './migrations/migrations';
 export { Auditable } from './mixins/auditable';
 export { assertNoCollision, RepositoryCore, toJsonRow } from './mixins/core';
@@ -24,7 +28,6 @@ export { mapPage, pageSchema, paginationQuerySchema, toPage } from './pagination
 export { toIsoTimestamp, toIsoTimestampOrNull } from './schema/timestamps';
 export { createInsertSchema, createSelectSchema, createUpdateSchema } from './schema/zod';
 export { TransactionContext } from './transactions/transaction-context';
-// Grouped conventions: every type in ./types, every constant in ./constants.
 export type {
   AuditAction,
   AuditChanges,

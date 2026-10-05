@@ -13,6 +13,7 @@ export type {
 } from './contracts';
 export type { CsvTable } from './csv';
 export type {
+  ArtifactDisk,
   DataFormat,
   DataPorterOptions,
   DataRoutesOptions,
@@ -27,4 +28,5 @@ export type {
   StoredExport,
 } from './import-export';
 export type { DataOperationsInput, ResourceOperationsInput } from './openapi';
-export type { ResourceServiceOptions, ServiceContext } from './service';
+export type { OwnershipConfig, ResourceServiceOptions, ServiceContext } from './service';
+export { ownedBy } from './service';

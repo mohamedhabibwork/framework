@@ -13,6 +13,7 @@ export { ResourceController } from './controller';
 export { csvField, csvToObjects, parseCsv, toCsv, toCsvLine } from './csv';
 export {
   DataPorter,
+  DiskExportStore,
   defineExportJob,
   defineImportJob,
   exportRequestSchema,
@@ -22,9 +23,10 @@ export {
   LocalExportStore,
 } from './import-export';
 export { dataOperations, dispatchResponseSchema, pluralizeResource, resourceOperations } from './openapi';
-export { DEFAULT_SERVICE_CONTEXT, ResourceService } from './service';
+export { DEFAULT_SERVICE_CONTEXT, ownedBy, ResourceService } from './service';
 // Grouped conventions: every type in ./types, every constant in ./constants.
 export type {
+  ArtifactDisk,
   AuditRoutesOptions,
   CrudRepository,
   CsvTable,
@@ -43,6 +45,7 @@ export type {
   ImportPayload,
   ImportRow,
   JsonRecord,
+  OwnershipConfig,
   Page,
   PageMeta,
   PageRequest,
