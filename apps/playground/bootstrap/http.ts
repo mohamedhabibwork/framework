@@ -1,31 +1,32 @@
-import { AUTH_SERVICE, authActorResolver, defineAuthRoutes } from '@framework/auth';
+import { AUTH_SERVICE, authActorResolver, defineAuthRoutes, requireAbility } from '@framework/auth';
 import { assertNoDuplicateRoutes, createHttpKernel } from '@framework/http';
 import { workflowRoutes } from '@framework/workflow';
-import { cors } from 'hono/cors';
 import { csrf } from 'hono/csrf';
 import { WEBSOCKET_GATEWAY } from '../app/providers/events.provider';
 import { apiRoutes } from '../routes/api';
 import { healthRoutes } from '../routes/health';
 import type { PlaygroundApplication } from './app';
-import { middleware } from './middleware';
+import { createMiddleware } from './middleware';
 
 /**
- * Composes the typed Hono application. Order:
- * request id -> body limit -> request scope (kernel) -> secure headers ->
- * CORS (API only, before auth so preflight succeeds) -> module routes.
+ * Composes the typed Hono application. The kernel owns the fixed outer order:
+ * request id -> body limit -> request scope -> secure headers (strict preset,
+ * `http.secureHeaders`) -> CORS (`http.corsOrigins`, off when empty) ->
+ * module routes. The `api` middleware group adds the shared throttle.
  */
 export function createHttp(application: PlaygroundApplication) {
   const { config } = application;
   const http = createHttpKernel(application, {
     exposeInternalErrors: config.app.debug && config.app.env !== 'production',
     maxBodyBytes: config.http.maxBodyBytes,
+    secureHeaders: config.http.secureHeaders,
+    cors: { origins: config.http.corsOrigins },
     // Session/Bearer authentication happens before the request scope exists,
     // so every `currentActor()` call in the chain sees the real identity.
     resolveActor: authActorResolver(application),
     report: (error, context) => console.error('[http] unhandled error', context, error),
   })
-    .use(...middleware.resolve(['api']))
-    .use('/api/*', cors({ origin: [...config.http.corsOrigins] }))
+    .use(...createMiddleware(config).resolve(['api']))
     .route('/health', healthRoutes)
     .route('/api/v1', apiRoutes)
     // Framework auth endpoints (register/login/logout/me + API tokens). The
@@ -52,9 +53,9 @@ export function createHttp(application: PlaygroundApplication) {
     );
     // Workflow introspection/control (list, status, retry, cancel, dispatch).
     // Mounted outside the documented /api prefix (like /health) so the OpenAPI
-    // drift check applies to client-facing resources; unprotected until Phase
-    // 3 auth — pass `authorize` to workflowRoutes when guards land.
-    http.route('/admin/workflows', workflowRoutes());
+    // drift check applies to client-facing resources; the ability guard makes
+    // it admin-only (401 anonymous, 403 without `workflow.admin`).
+    http.route('/admin/workflows', workflowRoutes({ authorize: requireAbility('workflow.admin') }));
   }
 
   assertNoDuplicateRoutes(http);

@@ -42,6 +42,12 @@ export const configSchema = z.object({
       .int()
       .min(1)
       .default(1024 * 1024),
+    secureHeaders: booleanString.default(true),
+    throttle: z.object({
+      enabled: booleanString.default(true),
+      limit: z.coerce.number().int().min(1).default(120),
+      windowSeconds: z.coerce.number().int().min(1).default(60),
+    }),
     shutdownTimeoutMs: z.coerce.number().int().min(100).default(10_000),
   }),
   database: z.object({
@@ -100,6 +106,12 @@ export const mapEnvironment = (env: Readonly<Record<string, string>>): z.input<t
     port: env.HTTP_PORT,
     corsOrigins: env.CORS_ORIGINS,
     maxBodyBytes: env.HTTP_MAX_BODY_BYTES,
+    secureHeaders: env.HTTP_SECURE_HEADERS as never,
+    throttle: {
+      enabled: env.HTTP_THROTTLE_ENABLED as never,
+      limit: env.HTTP_THROTTLE_LIMIT,
+      windowSeconds: env.HTTP_THROTTLE_WINDOW_SECONDS,
+    },
     shutdownTimeoutMs: env.SHUTDOWN_TIMEOUT_MS,
   },
   database: {

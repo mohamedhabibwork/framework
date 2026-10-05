@@ -42,6 +42,9 @@ export async function createTestContext(): Promise<TestContext> {
         APP_DEBUG: 'false',
         DATABASE_URL: database.url,
         DATABASE_MAX_CONNECTIONS: '4',
+        // Suites issue many rapid requests from one client; the coarse
+        // api-group ceiling is production behavior, not a test subject here.
+        HTTP_THROTTLE_ENABLED: 'false',
       }),
     );
     application = await createApplication(config).boot();

@@ -1,4 +1,13 @@
-import { createTokenSchema, loginSchema, registerSchema } from '@framework/auth';
+import {
+  createTokenSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema,
+  totpCodeSchema,
+  twoStepSchema,
+  verifyEmailSchema,
+} from '@framework/auth';
 import { defineOperations } from '@framework/openapi';
 import { z } from 'zod/v4';
 
@@ -44,11 +53,27 @@ export const authOperations = defineOperations('/api/v1/auth', 'Auth', [
     method: 'post',
     path: '/login',
     operationId: 'auth:login',
-    summary: 'Verify credentials and start a session (rotates any previous one)',
+    summary:
+      'Verify credentials and start a session; two-step accounts receive `{ twoStep: true, challenge }` instead (complete at /auth/two-step)',
     security: 'public',
     request: { body: loginSchema },
+    responses: {
+      200: {
+        description: 'Logged in, or a two-step challenge',
+        schema: z.object({ twoStep: z.boolean(), challenge: z.string().optional() }),
+      },
+    },
+    errors: [401, 403, 422, 429],
+  },
+  {
+    method: 'post',
+    path: '/two-step',
+    operationId: 'auth:two-step',
+    summary: 'Complete a two-step login with a TOTP or recovery code',
+    security: 'public',
+    request: { body: twoStepSchema },
     responses: { 200: { description: 'Logged in', schema: sessionResponse } },
-    errors: [401, 403, 422],
+    errors: [401, 422],
   },
   {
     method: 'post',
@@ -67,6 +92,78 @@ export const authOperations = defineOperations('/api/v1/auth', 'Auth', [
     security: tokenSecurity,
     responses: { 200: { description: 'Current principal', schema: principalResponse } },
     errors: [401],
+  },
+  {
+    method: 'post',
+    path: '/email/verification-request',
+    operationId: 'auth:request-email-verification',
+    summary: 'Send (or re-send) the email-verification token via the app notifier',
+    security: tokenSecurity,
+    responses: { 202: { description: 'Verification email dispatched' } },
+    errors: [401, 403],
+  },
+  {
+    method: 'post',
+    path: '/email/verify',
+    operationId: 'auth:verify-email',
+    summary: 'Verify an email address with the single-use token',
+    security: 'public',
+    request: { body: verifyEmailSchema },
+    responses: { 200: { description: 'Email verified', schema: sessionResponse } },
+    errors: [422],
+  },
+  {
+    method: 'post',
+    path: '/password/forgot',
+    operationId: 'auth:forgot-password',
+    summary: 'Request a password-reset token (identical response for unknown emails)',
+    security: 'public',
+    request: { body: forgotPasswordSchema },
+    responses: { 202: { description: 'Reset email dispatched when the account exists' } },
+    errors: [422],
+  },
+  {
+    method: 'post',
+    path: '/password/reset',
+    operationId: 'auth:reset-password',
+    summary: 'Rotate the password with a reset token; revokes all sessions and API tokens',
+    security: 'public',
+    request: { body: resetPasswordSchema },
+    responses: { 204: { description: 'Password rotated' } },
+    errors: [422],
+  },
+  {
+    method: 'post',
+    path: '/totp/enroll',
+    operationId: 'auth:totp-enroll',
+    summary: 'Start TOTP enrollment (returns the secret and otpauth:// URI)',
+    security: tokenSecurity,
+    responses: {
+      200: { description: 'Pending secret', schema: z.object({ secret: z.string(), uri: z.string() }) },
+    },
+    errors: [401],
+  },
+  {
+    method: 'post',
+    path: '/totp/enable',
+    operationId: 'auth:totp-enable',
+    summary: 'Activate two-step login; returns one-time recovery codes (shown once)',
+    security: tokenSecurity,
+    request: { body: totpCodeSchema },
+    responses: {
+      200: { description: 'Recovery codes', schema: z.object({ recoveryCodes: z.array(z.string()) }) },
+    },
+    errors: [401, 422],
+  },
+  {
+    method: 'post',
+    path: '/totp/disable',
+    operationId: 'auth:totp-disable',
+    summary: 'Disable two-step login after verifying a code',
+    security: tokenSecurity,
+    request: { body: totpCodeSchema },
+    responses: { 204: { description: 'Two-step login disabled' } },
+    errors: [401, 422],
   },
   {
     method: 'post',

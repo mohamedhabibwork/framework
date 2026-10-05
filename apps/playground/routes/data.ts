@@ -1,6 +1,6 @@
 import { EXECUTION_CONTEXT } from '@framework/core';
 import { importExportRoutes } from '@framework/crud';
-import { resolve } from '@framework/http';
+import { requireAuth, resolve } from '@framework/http';
 import { DATA_PORTER } from '../app/providers/data.tokens';
 
 /**
@@ -14,8 +14,12 @@ import { DATA_PORTER } from '../app/providers/data.tokens';
  * GET  /api/v1/data/export/status/:jobId   job state and progress
  * GET  /api/v1/data/export/download/:jobId the finished artifact
  * ```
+ *
+ * Guarded by `requireAuth`: dispatching jobs and reading artifacts is
+ * authenticated-only (401 for anonymous callers).
  */
 export const dataRoutes = importExportRoutes({
   porter: (c) => resolve(c, DATA_PORTER),
   execution: (c) => resolve(c, EXECUTION_CONTEXT),
+  authorize: requireAuth(),
 });
