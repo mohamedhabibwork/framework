@@ -1,3 +1,4 @@
+import type { Seeder } from '@framework/database';
 import type { MiddlewareDescription, RouteInfo } from '@framework/http';
 import type { Operation } from '@framework/openapi';
 
@@ -89,6 +90,8 @@ export interface ProjectAdapter {
   cache?(config: unknown): Promise<CacheClearHandle>;
   /** Opens the session store for `session:prune`; omitting it disables execution (exit 3). */
   sessions?(config: unknown): Promise<SessionPruneHandle>;
+  /** Registered seeders for `db:seed`; omitting it disables execution (exit 3). */
+  seeders?(): Promise<readonly Seeder[]>;
   /** Route table of the composed HTTP app; must not open connections. */
   routes(config: unknown): Promise<readonly RouteInfo[]>;
   providers(): readonly string[];

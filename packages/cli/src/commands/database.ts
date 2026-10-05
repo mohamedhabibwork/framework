@@ -1,6 +1,7 @@
 import { join } from 'node:path';
+import { ExecutionContext } from '@framework/core';
 import { createConnection, type DatabaseConnection, migrationStatus, runMigrations } from '@framework/database';
-import { stringOption } from '../args';
+import { flag, stringOption } from '../args';
 import { type CommandContext, defineCommand } from '../command';
 import { failure, usageError } from '../errors';
 import { table } from '../output';
@@ -110,6 +111,78 @@ export const databaseCommands = [
         throw failure('DB_CHECK_FAILED', 'Migration metadata check failed', tail(result.stdout + result.stderr));
       context.print('Migration metadata is consistent.');
       return { data: { consistent: true } };
+    },
+  }),
+  defineCommand({
+    name: 'db:fresh',
+    group: 'database',
+    status: 'implemented',
+    description: 'Drop every table in the public schema and re-run all migrations (destructive)',
+    options: [{ name: 'force', type: 'boolean', description: 'Override the production guard' }],
+    requires: ['PostgreSQL connection'],
+    async run(_input, context) {
+      const config = await context.project.loadConfig(context.envFile);
+      const env = (config as { app?: { env?: string } }).app?.env;
+      if (env === 'production' && !flag(_input.options, 'force')) {
+        throw failure(
+          'PRODUCTION_TARGET',
+          '"db:fresh" refuses to drop a production database',
+          'Development and test targets only; pass --force to override deliberately.',
+        );
+      }
+      const folder = join(context.root, context.project.paths.migrations);
+      const states = await withConnection(context, async (connection) => {
+        // Drop everything including the drizzle journal, then re-run the
+        // full journal forward — a half-fresh state (empty public, applied
+        // journal) would otherwise skip every migration.
+        await connection.sql`drop schema public cascade`;
+        await connection.sql`drop schema if exists drizzle cascade`;
+        await connection.sql`create schema public`;
+        await connection.sql`create schema if not exists drizzle`;
+        await connection.sql`create extension if not exists "pgcrypto"`;
+        await runMigrations(connection, folder);
+        return migrationStatus(connection, folder);
+      });
+      context.print(
+        `Fresh schema applied. ${states.filter((s) => s.applied).length}/${states.length} migrations recorded.`,
+      );
+      return { data: { migrations: states } };
+    },
+  }),
+  defineCommand({
+    name: 'db:seed',
+    group: 'database',
+    status: 'implemented',
+    description: 'Run registered seeders (all, or one by name)',
+    arguments: [{ name: 'seeder', description: 'Seeder name; omit for all', required: false }],
+    requires: ['PostgreSQL connection', 'A `seeders` hook in the project CLI adapter'],
+    async run({ positionals }, context) {
+      if (!context.project.seeders) {
+        throw failure(
+          'SEEDERS_HOOK_MISSING',
+          '"db:seed" needs the application\'s seeder registry',
+          'Add a `seeders` hook returning the registered seeders to this project CLI adapter.',
+        );
+      }
+      const wanted = positionals[0];
+      const all = await context.project.seeders();
+      if (all.length === 0) throw failure('SEEDERS_EMPTY', 'No seeders are registered');
+      const selected = wanted ? all.filter((seeder) => seeder.name === wanted) : all;
+      if (wanted && selected.length === 0) {
+        throw failure(
+          'SEEDER_UNKNOWN',
+          `No seeder named "${wanted}"`,
+          `Registered: ${all.map((seeder) => seeder.name).join(', ')}`,
+        );
+      }
+      const execution = new ExecutionContext('command', `seed-${Date.now()}`, { id: null, type: 'system' });
+      const ran: string[] = [];
+      for (const seeder of selected) {
+        await seeder.run({ execution, log: (message: string) => context.print(message) });
+        ran.push(seeder.name);
+        context.print(`Seeded ${seeder.name}.`);
+      }
+      return { data: { seeders: ran } };
     },
   }),
 ];

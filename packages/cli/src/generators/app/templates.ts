@@ -60,9 +60,11 @@ export function appTemplateFiles(input: AppTemplateInput): readonly NewFile[] {
     { path: 'routes/data.ts', content: dataRoutes() },
     { path: 'routes/health.ts', content: healthRoutes() },
     { path: 'database/schema/index.ts', content: schemaIndex() },
+    { path: 'database/seeders.ts', content: seeders() },
     { path: 'bin/server.ts', content: server() },
     { path: 'bin/worker.ts', content: worker() },
     { path: 'bin/cli.ts', content: cli(input) },
+    { path: 'Dockerfile', content: dockerfile() },
     { path: 'tests/support.ts', content: testSupport(input) },
     { path: 'tests/health.api.test.ts', content: healthTest() },
     { path: 'deployment/compose.yaml', content: compose(input) },
@@ -140,6 +142,13 @@ HTTP_HOST=127.0.0.1
 HTTP_PORT=3000
 CORS_ORIGINS=
 HTTP_MAX_BODY_BYTES=1048576
+# Strict hardening headers on every response (kernel preset).
+HTTP_SECURE_HEADERS=true
+# Coarse fixed-window ceiling for the \`api\` middleware group. Tests that make
+# many rapid requests can set HTTP_THROTTLE_ENABLED=false.
+HTTP_THROTTLE_ENABLED=true
+HTTP_THROTTLE_LIMIT=120
+HTTP_THROTTLE_WINDOW_SECONDS=60
 SHUTDOWN_TIMEOUT_MS=10000
 
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/${name.replaceAll('-', '_')}
@@ -280,6 +289,12 @@ export const configSchema = z.object({
           .filter(Boolean),
       ),
     maxBodyBytes: z.coerce.number().int().min(1).default(1024 * 1024),
+    secureHeaders: booleanString.default(true),
+    throttle: z.object({
+      enabled: booleanString.default(true),
+      limit: z.coerce.number().int().min(1).default(120),
+      windowSeconds: z.coerce.number().int().min(1).default(60),
+    }),
     shutdownTimeoutMs: z.coerce.number().int().min(100).default(10_000),
   }),
   database: z.object({
@@ -335,6 +350,12 @@ export const mapEnvironment = (env: Readonly<Record<string, string>>): z.input<t
     port: env.HTTP_PORT,
     corsOrigins: env.CORS_ORIGINS,
     maxBodyBytes: env.HTTP_MAX_BODY_BYTES,
+    secureHeaders: env.HTTP_SECURE_HEADERS as never,
+    throttle: {
+      enabled: env.HTTP_THROTTLE_ENABLED as never,
+      limit: env.HTTP_THROTTLE_LIMIT,
+      windowSeconds: env.HTTP_THROTTLE_WINDOW_SECONDS,
+    },
     shutdownTimeoutMs: env.SHUTDOWN_TIMEOUT_MS,
   },
   database: {
@@ -389,18 +410,18 @@ function bootstrapHttp({ className }: AppTemplateInput): string {
   return `import { auditRoutes } from '@framework/crud';
 import { AUDIT_READER, AuditReader } from '@framework/database';
 import { assertNoDuplicateRoutes, createHttpKernel, forbidden, type FrameworkEnv, resolve } from '@framework/http';
-import { cors } from 'hono/cors';
 import type { Context } from 'hono';
 import { apiRoutes } from '../routes/api';
 import { healthRoutes } from '../routes/health';
 import { WEBSOCKET_GATEWAY } from '../app/providers/events.provider';
 import type { ${className}Application } from './app';
-import { middleware } from './middleware';
+import { createMiddleware } from './middleware';
 
 /**
- * Composes the typed Hono application. Order:
- * request id -> body limit -> request scope (kernel) -> secure headers ->
- * CORS (API only, before auth so preflight succeeds) -> module routes.
+ * Composes the typed Hono application. The kernel owns the fixed outer order:
+ * request id -> body limit -> request scope -> secure headers (strict preset,
+ * \`http.secureHeaders\`) -> CORS (\`http.corsOrigins\`, off when empty) ->
+ * module routes. The \`api\` middleware group adds the shared throttle.
  *
  * Audit endpoints (\`/audit\`) read the framework-owned audit trail; they are
  * denied in production until an identity/authorization layer exists. The
@@ -412,10 +433,11 @@ export function createHttp(application: ${className}Application) {
   const http = createHttpKernel(application, {
     exposeInternalErrors: config.app.debug && config.app.env !== 'production',
     maxBodyBytes: config.http.maxBodyBytes,
+    secureHeaders: config.http.secureHeaders,
+    cors: { origins: config.http.corsOrigins },
     report: (error, context) => console.error('[http] unhandled error', context, error),
   })
-    .use(...middleware.resolve(['api']))
-    .use('/api/*', cors({ origin: [...config.http.corsOrigins] }))
+    .use(...createMiddleware(config).resolve(['api']))
     .route('/health', healthRoutes)
     .route('/api/v1', apiRoutes)
     .route(
@@ -442,19 +464,36 @@ export type AppType = ReturnType<typeof createHttp>;
 }
 
 function bootstrapMiddleware(): string {
-  return `import { MiddlewareRegistry } from '@framework/http';
-import { secureHeaders } from 'hono/secure-headers';
+  return `import { RATE_LIMITER } from '@framework/cache';
+import { MiddlewareRegistry, resolve, throttle } from '@framework/http';
+import type { AppConfig } from '../config';
 
 /**
- * Optional named aliases and groups. Resolved and validated at bootstrap so
- * unknown names fail before any request is served. Native \`hono/*\`
- * middleware can always be registered directly instead.
+ * Named aliases and groups, derived from the validated config. Resolved and
+ * validated at bootstrap so unknown names fail before any request is served.
+ * Native \`hono/*\` middleware can always be registered directly instead.
+ *
+ * Secure headers and CORS are owned by the kernel (\`http.secureHeaders\`,
+ * \`http.corsOrigins\`). \`throttle\` is the generic fixed-window limiter over
+ * the cache package's \`RATE_LIMITER\` (Redis counters are cluster-wide); the
+ * limiter resolves per request, so the alias is safe to declare pre-boot.
+ * Mounted on the \`api\` group with the \`http.throttle\` knobs (120/min/IP by
+ * default; test suites disable it via \`HTTP_THROTTLE_ENABLED=false\`).
  */
-export const middleware = new MiddlewareRegistry()
-  .alias('secure-headers', secureHeaders())
-  .group('api', ['secure-headers']);
-
-middleware.validate();
+export function createMiddleware(config: AppConfig): MiddlewareRegistry {
+  return new MiddlewareRegistry()
+    .alias(
+      'throttle',
+      throttle({
+        limiter: (c) => resolve(c, RATE_LIMITER),
+        enabled: config.http.throttle.enabled,
+        limit: config.http.throttle.limit,
+        windowSeconds: config.http.throttle.windowSeconds,
+        prefix: 'http.api',
+      }),
+    )
+    .group('api', ['throttle']);
+}
 `;
 }
 
@@ -718,9 +757,12 @@ export const apiRoutes = new Hono<FrameworkEnv>()
 function dataRoutes(): string {
   return `import { importExportRoutes } from '@framework/crud';
 import { EXECUTION_CONTEXT } from '@framework/core';
-import { resolve } from '@framework/http';
+import { forbidden, resolve } from '@framework/http';
+import { loadAppConfig } from '../config';
 import { DATA_PORTER } from '../app/providers/data.tokens';
 
+// Loaded once; the authorization guard reads the validated env from it.
+const configPromise = loadAppConfig();
 /**
  * Queued import/export endpoints (documented via \`dataOperations\` in
  * \`bootstrap/openapi.ts\`):
@@ -732,27 +774,55 @@ import { DATA_PORTER } from '../app/providers/data.tokens';
  * GET  /api/v1/data/export/status/:jobId   job state and progress
  * GET  /api/v1/data/export/download/:jobId the finished artifact
  * \`\`\`
+ *
+ * Import/export touches every resource, so it is denied in production until
+ * an authorization layer is wired: replace this guard with e.g.
+ * \`requireAuth()\` or \`requireAbility('data.import')\` once auth exists.
  */
 export const dataRoutes = importExportRoutes({
   porter: (c) => resolve(c, DATA_PORTER),
   execution: (c) => resolve(c, EXECUTION_CONTEXT),
+  authorize: async () => {
+    const config = await configPromise;
+    if (config.app.env === 'production') throw forbidden('Import/export endpoints require authorization');
+  },
 });
 `;
 }
 
 function healthRoutes(): string {
-  return `import { DATABASE, pingDatabase } from '@framework/database';
+  return `import { CACHE } from '@framework/cache';
+import { DATABASE, pingDatabase } from '@framework/database';
 import { type FrameworkEnv, resolve } from '@framework/http';
+import { QUEUE } from '@framework/queue';
 import { Hono } from 'hono';
 
-/** Liveness never touches dependencies; readiness checks the database. */
+/** One dependency probe; a thrown error becomes a 'failed' check, never a 500. */
+const check = async (name: string, probe: () => Promise<unknown>): Promise<[string, 'ok' | 'failed']> => {
+  try {
+    await probe();
+    return [name, 'ok'];
+  } catch {
+    return [name, 'failed'];
+  }
+};
+
+/** Liveness never touches dependencies; readiness probes every backing service. */
 export const healthRoutes = new Hono<FrameworkEnv>()
   .get('/live', (c) => c.json({ status: 'ok' as const }))
   .get('/ready', async (c) => {
-    const database = await pingDatabase(resolve(c, DATABASE));
-    return database
-      ? c.json({ status: 'ready' as const, checks: { database: 'ok' as const } }, 200)
-      : c.json({ status: 'unavailable' as const, checks: { database: 'failed' as const } }, 503);
+    // Cache \`has\` is a Redis round-trip (false on a missing key, error on an
+    // unreachable engine); queue counts exercises the BullMQ connection.
+    const checks = await Promise.all([
+      check('database', () => pingDatabase(resolve(c, DATABASE))),
+      check('redis', () => resolve(c, CACHE).has('__health__')),
+      check('queue', () => resolve(c, QUEUE).counts()),
+    ]);
+    const failed = checks.some(([, state]) => state === 'failed');
+    return c.json(
+      { status: failed ? ('unavailable' as const) : ('ready' as const), checks: Object.fromEntries(checks) },
+      failed ? 503 : 200,
+    );
   });
 `;
 }
@@ -763,6 +833,27 @@ function schemaIndex(): string {
 // Canonical Drizzle schema exports. Generators append below the marker.
 // @framework:schema-exports
 export { auditLogs };
+`;
+}
+
+function seeders(): string {
+  return `import { defineSeeder } from '@framework/database';
+
+/**
+ * Registered seeders, run in list order by \`bun run cli -- db:seed [name]\`.
+ * Keep them idempotent (guard on existing rows or upsert) — re-running is a
+ * routine operation. Factories (\`defineFactory\` from \`@framework/database\`)
+ * share shapes with tests; define them next to the seeder that uses them.
+ */
+export const seeders = [
+  defineSeeder({
+    name: 'smoke',
+    async run({ log }) {
+      log('smoke: nothing to seed yet — replace or extend this seeder');
+    },
+  }),
+  // @framework:seeders
+];
 `;
 }
 
@@ -828,12 +919,15 @@ import { type DatabaseConnection, createConnection } from '@framework/database';
 import { listRoutes } from '@framework/http';
 import { createApplication } from '../bootstrap/app';
 import { createHttp } from '../bootstrap/http';
-import { middleware } from '../bootstrap/middleware';
+import { createMiddleware } from '../bootstrap/middleware';
 import { buildOpenApiDocument, operations } from '../bootstrap/openapi';
 import { providers } from '../bootstrap/providers';
 import { type AppConfig, loadAppConfig } from '../config';
 
 const root = join(import.meta.dir, '..');
+
+// The middleware alias table is config-driven; load it once for \`middleware:list\`.
+const middleware = createMiddleware(await loadAppConfig({ envFile: join(root, '.env') }));
 
 /**
  * \`make:auth\` installs the auth module (and the \`@framework/auth\`
@@ -936,6 +1030,7 @@ const project = defineProject({
     }
   },
   providers: () => providers.map((provider) => provider.name),
+  seeders: async () => (await import('../database/seeders')).seeders,
   middleware: () => middleware.describe(),
   openapi: () => ({ operations, build: buildOpenApiDocument }),
 });
@@ -994,6 +1089,9 @@ export async function createTestContext(): Promise<TestContext> {
         APP_DEBUG: 'false',
         DATABASE_URL: database.url,
         DATABASE_MAX_CONNECTIONS: '4',
+        // Suites issue many rapid requests from one client; the coarse
+        // api-group ceiling is production behavior, not a test subject here.
+        HTTP_THROTTLE_ENABLED: 'false',
       }),
     );
     application = await createApplication(config).boot();
@@ -1073,13 +1171,16 @@ describe('generated application', () => {
 }
 
 function compose({ name }: AppTemplateInput): string {
-  return `services:
+  const db = name.replaceAll('-', '_');
+  return `# Development infrastructure (default profile) and the full application
+# stack (profile "app": server/worker containers from ./Dockerfile).
+services:
   postgres:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: ${name.replaceAll('-', '_')}
+      POSTGRES_DB: ${db}
     ports:
       - '127.0.0.1:5432:5432'
     healthcheck:
@@ -1097,5 +1198,75 @@ function compose({ name }: AppTemplateInput): string {
       interval: 5s
       timeout: 3s
       retries: 10
+
+  server:
+    build: .
+    profiles: ['app']
+    command: ['bun', 'run', 'bin/server.ts']
+    ports:
+      - '3000:3000'
+    environment: &app-env
+      APP_ENV: production
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/${db}
+      REDIS_URL: redis://redis:6379
+      CACHE_DRIVER: redis
+      CACHE_REDIS_URL: redis://redis:6379
+      CACHE_REDIS_PREFIX: ${name}
+      QUEUE_NAME: default
+      QUEUE_PREFIX: ${name}
+      EVENTS_DRIVER: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/health/ready']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  worker:
+    build: .
+    profiles: ['app']
+    command: ['bun', 'run', 'bin/worker.ts']
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+`;
+}
+
+function dockerfile(): string {
+  return `# Multi-stage build: dependencies install and typecheck run in cached
+# layers; the runtime image carries only production dependencies and source.
+FROM oven/bun:1.4.2-alpine AS deps
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+
+FROM deps AS build
+COPY . .
+# Fail the image build on a broken tree before it ships.
+RUN bunx tsc -p tsconfig.json
+
+FROM oven/bun:1.4.2-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/package.json /app/bun.lock ./
+COPY --from=build /app/node_modules node_modules
+COPY --from=build /app/bin bin
+COPY --from=build /app/bootstrap bootstrap
+COPY --from=build /app/app app
+COPY --from=build /app/routes routes
+COPY --from=build /app/config config
+COPY --from=build /app/database database
+# Non-root runtime user.
+USER bun
+CMD ["bun", "run", "bin/server.ts"]
 `;
 }

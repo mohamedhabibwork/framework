@@ -1,9 +1,20 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { flag, stringOption } from '../args';
 import { type CommandContext, defineCommand } from '../command';
 import { failure } from '../errors';
 import { runProcess, tail } from '../process';
 
 const TOOL_TIMEOUT_MS = 10 * 60_000;
+/** Optional peer SDKs the kits load dynamically; excluded from compiled binaries. */
+const OPTIONAL_PEER_SDKS = [
+  '@aws-sdk/*',
+  '@azure/storage-blob',
+  '@google-cloud/storage',
+  'minio',
+  'oci-common',
+  'oci-objectstorage',
+] as const;
 
 async function delegate(context: CommandContext, command: readonly string[], code: string) {
   const result = await runProcess(command, {
@@ -79,5 +90,62 @@ export const toolingCommands = [
     options: [{ name: 'check', type: 'boolean', description: 'Report only' }],
     run: ({ options }, context) =>
       delegate(context, [...context.project.tools.format, ...(flag(options, 'check') ? [] : ['--write'])], 'FORMAT'),
+  }),
+  defineCommand({
+    name: 'build',
+    group: 'project',
+    status: 'implemented',
+    description: 'Compile production binaries with `bun build --compile` into dist/',
+    options: [
+      {
+        name: 'target',
+        type: 'string',
+        values: ['server', 'worker', 'scheduler'],
+        description: 'One entry point; default builds every present one',
+      },
+    ],
+    async run({ options }, context) {
+      const wanted = stringOption(options, 'target');
+      const available = ['server', 'worker', 'scheduler'].filter((target) =>
+        existsSync(join(context.root, 'bin', `${target}.ts`)),
+      );
+      if (wanted && !available.includes(wanted)) {
+        throw failure('BUILD_TARGET_UNKNOWN', `No bin/${wanted}.ts entry point`, `Available: ${available.join(', ')}`);
+      }
+      const targets = wanted ? [wanted] : available;
+      if (targets.length === 0) {
+        throw failure('BUILD_NO_TARGETS', 'No bin/{server,worker,scheduler}.ts entry points found');
+      }
+      const built: string[] = [];
+      for (const target of targets) {
+        // Optional storage/notifications peer SDKs are never bundled: the
+        // kits load them dynamically and fail at boot with catalogued errors
+        // when a driver is configured but its SDK is not installed.
+        const result = await runProcess(
+          [
+            'bun',
+            'build',
+            '--compile',
+            '--minify',
+            '--sourcemap',
+            ...OPTIONAL_PEER_SDKS.flatMap((id) => ['--external', id]),
+            '--outfile',
+            join('dist', target),
+            join('bin', `${target}.ts`),
+          ],
+          { cwd: context.root, timeoutMs: TOOL_TIMEOUT_MS, signal: context.signal, stream: context.verbose },
+        );
+        if (result.exitCode !== 0) {
+          throw failure(
+            'BUILD_FAILED',
+            `bun build (${target}) exited with ${result.exitCode}`,
+            tail(result.stdout + result.stderr),
+          );
+        }
+        built.push(join('dist', target));
+        context.print(`Built dist/${target}`);
+      }
+      return { data: { built } };
+    },
   }),
 ];

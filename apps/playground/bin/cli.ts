@@ -6,12 +6,15 @@ import { createConnection } from '@framework/database';
 import { listRoutes } from '@framework/http';
 import { createApplication } from '../bootstrap/app';
 import { createHttp } from '../bootstrap/http';
-import { middleware } from '../bootstrap/middleware';
+import { createMiddleware } from '../bootstrap/middleware';
 import { buildOpenApiDocument, operations } from '../bootstrap/openapi';
 import { providers } from '../bootstrap/providers';
 import { type AppConfig, loadAppConfig } from '../config';
 
 const root = join(import.meta.dir, '..');
+
+// The middleware alias table is config-driven; load it once for `middleware:list`.
+const middleware = createMiddleware(await loadAppConfig({ envFile: join(root, '.env') }));
 
 /** Application-local CLI: the project root comes from this file, never from the shell's cwd. */
 const project = defineProject({
@@ -81,6 +84,7 @@ const project = defineProject({
     };
   },
   routes: async (config) => listRoutes(createHttp(createApplication(config as AppConfig))),
+  seeders: async () => (await import('../database/seeders')).seeders,
   providers: () => providers.map((provider) => provider.name),
   middleware: () => middleware.describe(),
   openapi: () => ({ operations, build: buildOpenApiDocument }),

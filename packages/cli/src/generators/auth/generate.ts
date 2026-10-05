@@ -95,7 +95,7 @@ export async function planAuth(
         insertAfterMarker(
           source,
           '@framework:schema-exports',
-          `export { apiTokens, sessions, users } from '${tablesSpecifier}';`,
+          `export { accountTokens, apiTokens, sessions, totpRecoveryCodes, users } from '${tablesSpecifier}';`,
           paths.schemaIndex,
         ),
     },
