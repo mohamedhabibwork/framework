@@ -12,8 +12,8 @@
     "@framework/database": "workspace:*",
     "@framework/http": "workspace:*",
     "@framework/validation": "workspace:*",
-    "drizzle-orm": "0.45.3",
-    "hono": "4.13.12",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.13",
     "jose": "6",
     "zod": "4.6.5"
   },
