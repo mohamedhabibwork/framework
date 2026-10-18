@@ -4,8 +4,8 @@
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.4",
     "@astrojs/mdx": "^8.0.3",
-    "@astrojs/starlight": "^0.42.5",
-    "astro": "^7.3.7",
+    "@astrojs/starlight": "^0.42.6",
+    "astro": "^7.3.8",
     "sharp": "^0.35.3"
   },
   "scripts": {
@@ -19,6 +19,6 @@
   },
   "type": "module",
   "devDependencies": {
-    "wrangler": "^4.148.0"
+    "wrangler": "^4.151.0"
   }
 }
