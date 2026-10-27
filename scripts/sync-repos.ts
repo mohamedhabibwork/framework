@@ -456,6 +456,9 @@ jobs:
 `,
   );
 
+  // Format generated template files with oxfmt before committing
+  run('bunx', ['oxfmt', relPath], { capture: true, allowFail: true });
+
   const sha = commitAndPushInPlace(
     stageDir,
     relPath,

@@ -75,6 +75,30 @@ export const configSchema = z.object({
       }),
     }),
   }),
+  mail: z.object({
+    driver: z.enum(['console', 'memory']).default('console'),
+    from: z.string().trim().toLowerCase().email().default('no-reply@demo-api-test.local'),
+  }),
+  notifications: z.object({
+    providers: z
+      .object({
+        push: z
+          .object({
+            type: z.string().trim().min(1),
+            target: z.string().trim().min(1).optional(),
+            options: z.record(z.string(), z.unknown()).optional(),
+          })
+          .optional(),
+        messaging: z
+          .object({
+            type: z.string().trim().min(1),
+            target: z.string().trim().min(1).optional(),
+            options: z.record(z.string(), z.unknown()).optional(),
+          })
+          .optional(),
+      })
+      .optional(),
+  }),
   // @framework:config-schema-sections
   auth: authConfigSchema,
 });
@@ -120,6 +144,16 @@ export const mapEnvironment = (env: Readonly<Record<string, string>>): z.input<t
     default: env.STORAGE_DEFAULT,
     disks: {
       local: { driver: 'local' as const, root: env.STORAGE_ROOT, visibility: env.STORAGE_VISIBILITY as never },
+    },
+  },
+  mail: {
+    driver: env.MAIL_DRIVER as never,
+    from: env.MAIL_FROM,
+  },
+  notifications: {
+    providers: {
+      ...(env.NOTIFICATIONS_PUSH_TYPE ? { push: { type: env.NOTIFICATIONS_PUSH_TYPE } } : {}),
+      ...(env.NOTIFICATIONS_MESSAGING_TYPE ? { messaging: { type: env.NOTIFICATIONS_MESSAGING_TYPE } } : {}),
     },
   },
   // @framework:config-env-sections

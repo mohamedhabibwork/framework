@@ -8,6 +8,8 @@ import { dataProvider } from '../app/providers/data.provider';
 import { databaseProvider } from '../app/providers/database.provider';
 import { eventsProvider } from '../app/providers/events.provider';
 import { loggingProvider } from '../app/providers/logging.provider';
+import { mailProvider } from '../app/providers/mail.provider';
+import { notificationsProvider } from '../app/providers/notifications.provider';
 import { storageProvider } from '../app/providers/storage.provider';
 import { workflowsProvider } from '../app/workflows';
 import type { AppConfig } from '../config';
@@ -24,6 +26,8 @@ export const providers: readonly ServiceProvider<AppConfig>[] = [
   dataProvider,
   storageProvider,
   loggingProvider,
+  mailProvider,
+  notificationsProvider,
   // @framework:providers
   productsProvider,
   workflowProvider,

@@ -23,6 +23,8 @@
         "@framework/events": "workspace:*",
         "@framework/http": "workspace:*",
         "@framework/logging": "workspace:*",
+        "@framework/mail": "workspace:*",
+        "@framework/notifications": "workspace:*",
         "@framework/openapi": "workspace:*",
         "@framework/queue": "workspace:*",
         "@framework/storage": "workspace:*",
