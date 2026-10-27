@@ -44,7 +44,68 @@ apps/docs            Starlight documentation site (MDX, Dokploy)
 deployment/          local PostgreSQL + Redis (compose)
 ```
 
+## Ecosystem Repositories
+
+| Repository | Role |
+|---|---|
+| [`mohamedhabibwork/framework`](https://github.com/mohamedhabibwork/framework) | Main framework monorepo (source of truth for all packages, reference apps, and release tooling) |
+| [`mohamedhabibwork/framework-app`](https://github.com/mohamedhabibwork/framework-app) | **GitHub Template Repository** — create a new standalone application based on the framework |
+| [`mohamedhabibwork/framework-docs`](https://github.com/mohamedhabibwork/framework-docs) | Standalone documentation repository (Starlight MDX site + Markdown guides, deployed at [framework.habib.cloud](https://framework.habib.cloud)) |
+
+### Package Repositories (25 Subtree-Split Packages)
+
+Every package in `packages/*` is synced to its own GitHub repository and linked back to [`mohamedhabibwork/framework`](https://github.com/mohamedhabibwork/framework):
+
+| Package | GitHub Repository | Description |
+|---|---|---|
+| `@framework/ai-mcp` | [`mohamedhabibwork/framework-ai-mcp`](https://github.com/mohamedhabibwork/framework-ai-mcp) | MCP server bridging the framework CLI and documentation for AI coding agents |
+| `@framework/auth` | [`mohamedhabibwork/framework-auth`](https://github.com/mohamedhabibwork/framework-auth) | Session & personal API token authentication, password hashing, TOTP, and guards |
+| `@framework/cache` | [`mohamedhabibwork/framework-cache`](https://github.com/mohamedhabibwork/framework-cache) | Cache manager, service provider, and drivers (`@mohamedhabibwork/cachekit`) |
+| `@framework/cli` | [`mohamedhabibwork/framework-cli`](https://github.com/mohamedhabibwork/framework-cli) | CLI runtime, command registry, and application/module/auth code generators |
+| `@framework/core` | [`mohamedhabibwork/framework-core`](https://github.com/mohamedhabibwork/framework-core) | IoC container, service providers, configuration loader, lifecycle, and execution context |
+| `@framework/crud` | [`mohamedhabibwork/framework-crud`](https://github.com/mohamedhabibwork/framework-crud) | Generic CRUD service/controller, audit endpoints, and queued CSV/JSON import-export |
+| `@framework/database` | [`mohamedhabibwork/framework-database`](https://github.com/mohamedhabibwork/framework-database) | PostgreSQL connection, transactions, Drizzle CRUD mixins, audit trail, pagination, migrations |
+| `@framework/events` | [`mohamedhabibwork/framework-events`](https://github.com/mohamedhabibwork/framework-events) | Typed event bus (in-memory + Redis pub/sub) and WebSocket realtime hub |
+| `@framework/http` | [`mohamedhabibwork/framework-http`](https://github.com/mohamedhabibwork/framework-http) | Hono HTTP kernel, structured errors, request scope, middleware registry, policies |
+| `@framework/logging` | [`mohamedhabibwork/framework-logging`](https://github.com/mohamedhabibwork/framework-logging) | Structured logger provider and context-aware logging (`@mohamedhabibwork/loggerkit`) |
+| `@framework/mail` | [`mohamedhabibwork/framework-mail`](https://github.com/mohamedhabibwork/framework-mail) | Typed mailable builder, transports, and mail service provider |
+| `@framework/notifications` | [`mohamedhabibwork/framework-notifications`](https://github.com/mohamedhabibwork/framework-notifications) | Multi-channel notification dispatcher and builders (`@mohamedhabibwork/notifykit`) |
+| `@framework/oauth-server` | [`mohamedhabibwork/framework-oauth-server`](https://github.com/mohamedhabibwork/framework-oauth-server) | OAuth 2.0 / OIDC authorization server, PKCE, token introspection, client management |
+| `@framework/observatory` | [`mohamedhabibwork/framework-observatory`](https://github.com/mohamedhabibwork/framework-observatory) | Request, query, event, job, and exception telemetry and inspection |
+| `@framework/openapi` | [`mohamedhabibwork/framework-openapi`](https://github.com/mohamedhabibwork/framework-openapi) | OpenAPI 3.1 specification generator and schema drift checker |
+| `@framework/prompts` | [`mohamedhabibwork/framework-prompts`](https://github.com/mohamedhabibwork/framework-prompts) | Interactive terminal prompts, spinners, tables, and structured CLI output |
+| `@framework/queue` | [`mohamedhabibwork/framework-queue`](https://github.com/mohamedhabibwork/framework-queue) | BullMQ job queue manager, worker runtime, and retry policies |
+| `@framework/scheduler` | [`mohamedhabibwork/framework-scheduler`](https://github.com/mohamedhabibwork/framework-scheduler) | Cron schedule registry, distributed locking, and scheduled job/workflow runner |
+| `@framework/search` | [`mohamedhabibwork/framework-search`](https://github.com/mohamedhabibwork/framework-search) | Full-text and indexed model search with pluggable drivers and queue-backed syncing |
+| `@framework/socialite` | [`mohamedhabibwork/framework-socialite`](https://github.com/mohamedhabibwork/framework-socialite) | OAuth2 social authentication providers (GitHub, Google, Discord, and custom OIDC) |
+| `@framework/storage` | [`mohamedhabibwork/framework-storage`](https://github.com/mohamedhabibwork/framework-storage) | Disk storage manager and local/S3 drivers (`@mohamedhabibwork/storagekit`) |
+| `@framework/support` | [`mohamedhabibwork/framework-support`](https://github.com/mohamedhabibwork/framework-support) | Laravel-style helpers (`config`, `env`, `abort`, `logger`, `retry`, context) |
+| `@framework/testing` | [`mohamedhabibwork/framework-testing`](https://github.com/mohamedhabibwork/framework-testing) | Isolated PostgreSQL test databases, transaction sandboxes, and HTTP test helpers |
+| `@framework/validation` | [`mohamedhabibwork/framework-validation`](https://github.com/mohamedhabibwork/framework-validation) | Request validation middleware and typed form requests powered by Hono and Zod |
+| `@framework/workflow` | [`mohamedhabibwork/framework-workflow`](https://github.com/mohamedhabibwork/framework-workflow) | Multi-stage, multi-step resumable workflow engine with policies and persistence |
+
+Syncing all 25 package repos, the app template repo, and the docs repo from the monorepo:
+
+```sh
+bun run sync:repos              # create/update and push all 27 linked GitHub repositories
+bun run sync:repos -- --dry-run # preview without pushing
+```
+
 ## Minimal commands
+
+### Create a standalone app from the GitHub template
+
+```sh
+gh repo create my-api --template mohamedhabibwork/framework-app --clone
+cd my-api
+cp .env.example .env
+bun install
+docker compose -f deployment/compose.yaml up -d --wait
+bun run cli -- db:migrate
+bun run dev
+```
+
+### Develop inside the framework workspace
 
 ```sh
 bun install

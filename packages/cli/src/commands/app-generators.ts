@@ -33,9 +33,10 @@ async function requireDependency(context: CommandContext, dependency: string): P
     readonly dependencies?: Readonly<Record<string, string>>;
   };
   if (!manifest.dependencies?.[dependency]) {
+    const shortName = dependency.replace(/^@framework\//, '');
     throw usageError(
       `This generator needs ${dependency} in package.json dependencies`,
-      `Add "${dependency}": "workspace:*" (or bun add ${dependency}), run bun install, then retry.`,
+      `Add "${dependency}": "workspace:*" (or "github:mohamedhabibwork/framework-${shortName}"), run bun install, then retry.`,
     );
   }
 }

@@ -1,13 +1,24 @@
 {
   "name": "@framework/mail",
   "version": "0.2.0",
+  "description": "Typed mailable builder, transports, and mail service provider.",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "homepage": "https://github.com/mohamedhabibwork/framework-mail#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamedhabibwork/framework.git",
+    "directory": "packages/mail"
+  },
+  "bugs": {
+    "url": "https://github.com/mohamedhabibwork/framework/issues"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
     "@framework/core": "workspace:*",
-    "zod": "4.6.5"
+    "zod": "4.6.7"
   }
 }

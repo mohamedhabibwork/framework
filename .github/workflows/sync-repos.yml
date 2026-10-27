@@ -1,0 +1,32 @@
+name: Sync Ecosystem Repositories
+
+# Automatically syncs all 25 @framework/* package repositories, the
+# mohamedhabibwork/framework-app template repository, and the
+# mohamedhabibwork/framework-docs repository whenever main or a release tag is
+# pushed (requires a personal access token with `repo` scope in GH_SYNC_TOKEN).
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: sync-repos
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync packages, app template & docs repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: ${{ secrets.GH_SYNC_TOKEN != '' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - name: Sync GitHub repositories
+        env:
+          GH_TOKEN: ${{ secrets.GH_SYNC_TOKEN || github.token }}
+        run: bun run sync:repos

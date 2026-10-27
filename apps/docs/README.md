@@ -1,49 +1,37 @@
-# Starlight Starter Kit: Basics
+# Framework Documentation (`mohamedhabibwork/framework-docs`)
 
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+Official documentation site and Markdown reference guides for [**mohamedhabibwork/framework**](https://github.com/mohamedhabibwork/framework) — a Laravel-inspired TypeScript framework built on Bun, Hono, Drizzle ORM, and Zod.
 
-```
-bun create astro@latest -- --template starlight
-```
+## Ecosystem Links
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+- **Live Documentation**: [https://framework.habib.cloud](https://framework.habib.cloud)
+- **Main Framework Repository**: [mohamedhabibwork/framework](https://github.com/mohamedhabibwork/framework)
+- **Starter Application Template**: [mohamedhabibwork/framework-app](https://github.com/mohamedhabibwork/framework-app)
+- **Documentation Repository**: [mohamedhabibwork/framework-docs](https://github.com/mohamedhabibwork/framework-docs)
 
-## 🚀 Project Structure
+## Project Structure
 
-Inside of your Astro + Starlight project, you'll see the following folders and files:
-
-```
+```text
 .
-├── public/
+├── docs/                  # Plain Markdown guides (also consumed by @framework/ai-mcp)
+├── public/                # Static assets
+├── scripts/               # Satteri WASM postinstall & version snapshot scripts
 ├── src/
-│   ├── assets/
-│   ├── content/
-│   │   └── docs/
-│   └── content.config.ts
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+│   ├── components/        # Custom Starlight components (VersionPicker)
+│   ├── content/docs/      # English (root), Arabic (ar/), and versioned (v01/) MDX pages
+│   └── data/              # Sidebar and version definitions
+├── vendor/                # Vendored @bruits/satteri-wasm32-wasi tarball for Bun
+├── astro.config.mjs       # Astro + Starlight configuration
+├── Dockerfile             # Multi-stage Bun -> nginx production container
+├── nginx.conf             # Static site nginx configuration
+└── package.json
 ```
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
+## Commands
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
-
-Static assets, like favicons, can be placed in the `public/` directory.
-
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `bun install`             | Installs dependencies                            |
-| `bun dev`             | Starts local dev server at `localhost:4321`      |
-| `bun build`           | Build your production site to `./dist/`          |
-| `bun preview`         | Preview your build locally, before deploying     |
-| `bun astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `bun astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Check out [Starlight’s docs](https://starlight.astro.build/), read [the Astro documentation](https://docs.astro.build), or jump into the [Astro Discord server](https://astro.build/chat).
+| Command | Action |
+| :--- | :--- |
+| `bun install` | Install dependencies and link the vendored Satteri WASM binding |
+| `bun run dev` | Start local Starlight dev server at `http://localhost:4321` |
+| `bun run build` | Build static production site to `./dist/` |
+| `bun run preview` | Preview the production build locally |

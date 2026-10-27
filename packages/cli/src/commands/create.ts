@@ -43,6 +43,28 @@ async function frameworkWorkspaceRoot(target: string): Promise<string | null> {
 }
 
 /**
+ * Rewrites `@framework/<pkg>: "workspace:*"` to `"github:mohamedhabibwork/framework-<pkg>"`
+ * and includes `@types/bun` in `devDependencies` when generating a standalone application
+ * outside the framework monorepo.
+ */
+export function toStandalonePackageJson(source: string): string {
+  const rewritten = source.replaceAll(
+    /"@framework\/([a-z0-9-]+)":\s*"workspace:\*"/g,
+    '"@framework/$1": "github:mohamedhabibwork/framework-$1"',
+  );
+  const pkg = JSON.parse(rewritten) as {
+    devDependencies?: Record<string, string>;
+    [key: string]: unknown;
+  };
+  const devDeps: Record<string, string> = {
+    '@types/bun': '1.4.2',
+    ...(pkg.devDependencies ?? {}),
+  };
+  pkg.devDependencies = Object.fromEntries(Object.entries(devDeps).sort(([a], [b]) => a.localeCompare(b)));
+  return `${JSON.stringify(pkg, null, 2)}\n`;
+}
+
+/**
  * Installs dependencies without polluting stdout (which carries the --json
  * envelope); progress goes to stderr diagnostics instead.
  */
@@ -157,11 +179,15 @@ export const createCommands = [
         );
       }
 
-      const files: readonly NewFile[] = appTemplateFiles(input);
+      const workspace = await frameworkWorkspaceRoot(target);
+      const files: readonly NewFile[] = appTemplateFiles(input).map((file) =>
+        file.path === 'package.json' && !workspace
+          ? { path: file.path, content: toStandalonePackageJson(file.content) }
+          : file,
+      );
       const changes = await buildChanges(target, files, [], false);
       const applied = await applyChanges(target, changes);
       try {
-        const workspace = await frameworkWorkspaceRoot(target);
         const warnings: string[] = [];
         let dependenciesInstalled = false;
         if (options['no-install'] === true) {
@@ -203,7 +229,7 @@ export const createCommands = [
           );
         } else {
           warnings.push(
-            'Generated apps resolve @framework/* from the framework workspace; publish or pack the packages for standalone use.',
+            'Standalone app configured to resolve @framework/* packages from github:mohamedhabibwork/framework-*.',
           );
         }
         const nextSteps = [

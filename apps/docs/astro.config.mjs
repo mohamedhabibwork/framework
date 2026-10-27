@@ -22,7 +22,10 @@ export default defineConfig({
 		starlight({
 			title: 'Framework',
 			description: 'Laravel-inspired TypeScript framework on Bun + Hono + Drizzle + Zod',
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' }],
+			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mohamedhabibwork/framework' }],
+			editLink: {
+				baseUrl: 'https://github.com/mohamedhabibwork/framework-docs/edit/main/',
+			},
 			// Versioned docs: the current release is shown in the header version
 			// pill and listed on /versions; older versions archive to their own
 			// locale when a breaking pre-1.0 minor ships (Laravel-style docs
