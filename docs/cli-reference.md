@@ -113,6 +113,39 @@ refuses to invent columns, overwrite unrelated files, or collide routes.
 
 Delegates to the same `make:crud` pipeline with an explicit module name.
 
+### Single-artifact generators
+
+`make:schema`, `make:repository`, `make:dto`, `make:request`, `make:response`,
+`make:service`, `make:controller` and `make:policy` render **one** artifact of
+the `make:crud` pipeline each, through the same renderers — output is
+byte-identical to a whole-module generation.
+
+| Option | Applies to | Effect |
+|---|---|---|
+| `--module <name>` | all slices | Destination module (default: resource plural) |
+| `--table <export>` | table-coupled slices | Drizzle table export (default: plural camel of the resource) |
+| `--schema-file <path>` | table-coupled slices | Where `--table` is exported (default: schema index) |
+| `--soft-delete` | `make:schema` | Table carries `deletedAt` (string mode) |
+| `--fields '<spec>'` / `--definition <path>` | `make:schema` | New-table fields, same grammar as `make:crud` |
+| `--kind create\|update\|list` | `make:request` | Which operation (default create) |
+| `--access public\|authenticated` | `make:policy` | Declared resource access (required; `authenticated` requires `make:auth`) |
+| `--dry-run` / `--force` | all | As in `make:crud` |
+
+Table-coupled slices introspect the Drizzle export and refuse with actionable
+hints when a sibling artifact they import is missing (`make:schema` starts a
+table-first module; `make:crud` remains the whole-module path).
+
+### Runtime scaffolds
+
+`make:middleware`, `make:provider`, `make:event`, `make:listener` and
+`make:test` generate standalone, typecheckable scaffolds and register them
+through the app's markers: `make:middleware` aliases into
+`bootstrap/middleware.ts` (`@framework:middleware`), `make:provider` into
+`bootstrap/providers.ts`, `make:listener` into the `app/listeners` registry
+(`@framework:listeners`, subscribed by the listeners provider at boot — pass
+`--channel`). `make:test --api` scaffolds an endpoint test through the
+generated `tests/support.ts`. All support `--dry-run` and `--force`.
+
 ### `make:auth`
 
 Installs session + personal API token authentication: the `app/modules/auth`
@@ -230,6 +263,24 @@ jobs or workflows, which run on the regular workers.
 | `openapi:generate --output <path> [--api-version <v>]` | Emit the OpenAPI 3.1 document for documented operations |
 | `openapi:check` | Validate the document against the live route table (drift check) |
 
+## Application generators
+
+Laravel-style `make:*` scaffolds for the pieces an application owns. All share
+the `make:crud` pipeline (`--dry-run` writes nothing, existing files are
+conflicts unless `--force`, registries update through `// @framework:*`
+markers) and refuse up front when the generated code would import a package
+the app does not depend on.
+
+| Command | Writes | Notes |
+|---|---|---|
+| `make:mail <name>` | `app/mail/<name>.mail.ts` | Typed data → subject/text/HTML (interpolations HTML-escaped) and a `send<Name>Mail(mailer, to, data)` helper. Needs `@framework/mail` |
+| `make:notification <name> [--channels email,database,push,messaging]` | `app/notifications/<name>.notification.ts` | `defineNotification` with one builder per declared channel (default `email,database`). Needs `@framework/notifications` |
+| `make:command <name> [--signature group:name]` | `app/commands/<name>.command.ts` | Registered in `app/commands/index.ts` (created on first use) and appended to the catalog in `bin/cli.ts` (default signature `app:<name>`; existing names refused) |
+| `make:schedule <name> (--job <job> \| --workflow <name>) [--cron "<expr>"]` | `app/schedules/<name>.schedule.ts` | Registered under `@framework:schedules`; `--job` must exist (`make:job`); cron is validated as five fields (default hourly). Needs `@framework/scheduler` |
+| `make:guard <name> [--header x-api-key]` | `app/auth/guards/<name>.guard.ts` | `ActorResolver` reading one credential header; compose it in the kernel's `resolveActor` |
+| `make:user-provider <name>` | `app/auth/<name>.user-provider.ts` | `UserProvider` decorating `DatabaseUserProvider`; bind as `USER_PROVIDER`. Needs `@framework/auth` |
+| `make:migration <name>` | `database/migrations/NNNN_<name>.sql` + journal entry | Empty custom SQL migration via the pinned `drizzle-kit generate --custom` |
+
 ## Tooling (delegated)
 
 `typecheck`, `test [--filter]`, `lint [--fix]`, `format [--check]` run the
@@ -238,10 +289,8 @@ re-implements compilers or formatters.
 
 ## Planned commands
 
-The remaining specification catalog (`make:controller`, `make:service`,
-`make:policy`, `db:seed`, `db:rollback`, `queue:retry`, `cache:prune`,
-`storage:link`, `storage:prune`, `build`, `integration:*`, …) is listed by
+The remaining specification catalog (`make:model` — the ORM layer is out of
+scope, `make:integration`, `db:rollback` — forward-only by decision,
+`cache:prune`, `storage:link`, `storage:prune`, `integration:*`) is listed by
 `list` with status `planned` and exits with code 3 when invoked. See
 [status.md](status.md) for the delivery phases that introduce them.
-Deferred auth scope (password recovery, email verification, OTP, JWT/JWK
-guards) stays planned until required.

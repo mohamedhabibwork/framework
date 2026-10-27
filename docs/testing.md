@@ -89,6 +89,28 @@ Run everything from the workspace root:
 bun test          # or: bun run test
 ```
 
+## Coverage
+
+`bun run coverage` runs the whole workspace suite once with lcov coverage and
+enforces per-package line/function thresholds (`scripts/coverage.ts`):
+
+```sh
+bun run coverage              # suite + gate (what CI runs)
+bun run coverage -- --report  # suite + table, no thresholds
+```
+
+- Thresholds are measured baselines minus a small margin: they catch
+  regressions, not aspirational targets. Raise them by improving a suite,
+  then commit the new numbers with it.
+- Test files are excluded and the template-literal generator files
+  (`packages/cli/src/generators/*/templates*.ts`) are ignored via
+  `bunfig.toml` — authored strings are not executed logic.
+- Known limitation: Bun's coverage only reports files the run actually
+  loaded, so a src file no test imports is invisible rather than 0%. The
+  gate is a regression guard, not a whole-tree guarantee. (The CLI's own
+  number is bounded the same way: its heaviest surfaces run in spawned
+  scratch-copy processes that coverage cannot see.)
+
 ## Conventions
 
 - No skipped-if-missing tests: missing `TEST_DATABASE_URL` fails with setup

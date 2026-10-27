@@ -2,6 +2,14 @@
 
 Derived from [status.md](status.md) (2026-10-04: 301 tests passing, typecheck + lint clean). Every item closes a documented gap: a "planned" CLI command, a "Known limitation", or deferred phase scope. Each item ships with the existing gate standard: an automated test against real infrastructure, its status.md row moved to **Validated**, and docs.
 
+Delivery status (2026-10-27): **M1, M2, M3 delivered** — every planned
+`make:*` generator now ships except `make:model` (ORM out of scope) and
+`make:integration`, alongside `integration:*`; `db:rollback` stays planned by
+the forward-only ADR; **M5** delivered except the Node-runtime ADR; **M7**
+items 2–4 delivered (route blind spot fixed, per-status OpenAPI error schemas,
+per-package coverage gate) with tracing/metrics still planned; **M4** and
+**M6** remain open.
+
 ## Priorities
 
 | # | Milestone | Why now | Size |
@@ -34,7 +42,7 @@ Derived from [status.md](status.md) (2026-10-04: 301 tests passing, typecheck + 
 
 1. `db:rollback` / `db:fresh` with production-target guards (reuse `@framework/testing` guards).
 2. `db:seed` with `defineSeeder` + `defineFactory`, shared with tests.
-3. `make:*` generators (currently exit 3), in order: `job`, `event`, `policy`, `middleware`, `provider`, `notification`, `workflow`, `schedule`, `seeder`, `factory` — one shared template/conflict/dry-run pipeline from `make:crud`.
+3. ✅ `make:*` generators on one shared template/conflict/dry-run pipeline from `make:crud`: `job`, `seeder`, `factory`, the CRUD slices, `middleware`, `provider`, `event`, `listener`, `test`, and (2026-10-27) `mail`, `notification`, `command`, `schedule`, `guard`, `user-provider`, `migration`.
 4. Remaining `queue:*` (`failed`, `retry`, `flush`, `pause`, `resume`) — backend exists on `QueueManager`.
 5. `build`: `bun build --compile` for server/worker/scheduler.
 6. Gate: generate → typecheck → app suite green, per generator.

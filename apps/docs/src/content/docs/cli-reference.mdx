@@ -118,6 +118,26 @@ refuses to invent columns, overwrite unrelated files, or collide routes.
 
 Delegates to the same `make:crud` pipeline with an explicit module name.
 
+### Single-artifact generators (`make:schema`, `make:repository`, `make:dto`,
+`make:request`, `make:response`, `make:service`, `make:controller`, `make:policy`)
+
+One artifact of the `make:crud` pipeline at a time, rendered by the same code
+so output is byte-identical to a whole-module generation. Table-coupled slices
+introspect an existing Drizzle export (`--table`, default: the resource's
+plural) and refuse with actionable hints when a sibling artifact they import
+is missing — `make:schema` starts a table-first module, `make:crud` remains
+the whole-module path.
+
+### Runtime scaffolds (`make:middleware`, `make:provider`, `make:event`,
+`make:listener`, `make:test`)
+
+Standalone, typecheckable scaffolds registered through the app's markers:
+`make:middleware` aliases into `bootstrap/middleware.ts`
+(`@framework:middleware`), `make:provider` into `bootstrap/providers.ts`,
+`make:listener` into the `app/listeners` registry (`@framework:listeners`,
+subscribed by the listeners provider at boot). `make:test --api` scaffolds an
+endpoint test through the generated `tests/support.ts`.
+
 ## Database
 
 | Command | Effect |
@@ -146,6 +166,24 @@ Both require a reachable Redis (`config redis.url`).
 | `openapi:generate --output <path> [--api-version <v>]` | Emit the OpenAPI 3.1 document for documented operations |
 | `openapi:check` | Validate the document against the live route table (drift check) |
 
+## Application generators
+
+Laravel-style `make:*` scaffolds for the pieces an application owns. All share
+the `make:crud` pipeline (`--dry-run` writes nothing, existing files are
+conflicts unless `--force`, registries update through `// @framework:*`
+markers) and refuse up front when the generated code would import a package
+the app does not depend on.
+
+| Command | Writes | Notes |
+|---|---|---|
+| `make:mail <name>` | `app/mail/<name>.mail.ts` | Typed data → subject/text/HTML (interpolations HTML-escaped) and a `send<Name>Mail(mailer, to, data)` helper. Needs `@framework/mail` |
+| `make:notification <name> [--channels email,database,push,messaging]` | `app/notifications/<name>.notification.ts` | `defineNotification` with one builder per declared channel (default `email,database`). Needs `@framework/notifications` |
+| `make:command <name> [--signature group:name]` | `app/commands/<name>.command.ts` | Registered in `app/commands/index.ts` (created on first use) and appended to the catalog in `bin/cli.ts` (default signature `app:<name>`; existing names refused) |
+| `make:schedule <name> (--job <job> \| --workflow <name>) [--cron "<expr>"]` | `app/schedules/<name>.schedule.ts` | Registered under `@framework:schedules`; `--job` must exist (`make:job`); cron is validated as five fields (default hourly). Needs `@framework/scheduler` |
+| `make:guard <name> [--header x-api-key]` | `app/auth/guards/<name>.guard.ts` | `ActorResolver` reading one credential header; compose it in the kernel's `resolveActor` |
+| `make:user-provider <name>` | `app/auth/<name>.user-provider.ts` | `UserProvider` decorating `DatabaseUserProvider`; bind as `USER_PROVIDER`. Needs `@framework/auth` |
+| `make:migration <name>` | `database/migrations/NNNN_<name>.sql` + journal entry | Empty custom SQL migration via the pinned `drizzle-kit generate --custom` |
+
 ## Tooling (delegated)
 
 `typecheck`, `test [--filter]`, `lint [--fix]`, `format [--check]` run the
@@ -154,8 +192,8 @@ re-implements compilers or formatters.
 
 ## Planned commands
 
-The remaining specification catalog (`make:controller`, `make:service`,
-`make:policy`, `db:seed`, `db:rollback`, `queue:retry`, `schedule:*`,
-`cache:*`, `storage:*`, `build`, `integration:*`, …) is listed by `list`
-with status `planned` and exits with code 3 when invoked. See
+The remaining specification catalog (`make:model` — the ORM layer is out of
+scope, `make:integration`, `db:rollback` — forward-only by decision,
+`cache:prune`, `storage:link`, `storage:prune`, `integration:*`) is listed by
+`list` with status `planned` and exits with code 3 when invoked. See
 [status.md](/status/) for the delivery phases that introduce them.

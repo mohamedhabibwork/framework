@@ -13,6 +13,7 @@ A Bun + Hono + Drizzle + Zod framework workspace. Specification: [framwork.md](f
 | [Platform guide](docs/platform.md) | Request context, errors, pagination/filter/sort, audit, events & realtime, queues, import/export |
 | [Testing](docs/testing.md) | Isolated databases, endpoint suites, test modes, release gates |
 | [Deployment](docs/deployment.md) | Processes, configuration, migrations as a release step, scaling |
+| [AI integration](docs/ai.md) | MCP server (framework tools + docs resources) and agent skills |
 | [Implementation status](docs/status.md) | What is validated, implemented or planned |
 
 The same documentation ships as a [Starlight](https://starlight.astro.build) site (MDX + Cloudflare adapter) in `apps/docs`:
@@ -37,6 +38,7 @@ packages/openapi     OpenAPI 3.1 generation and drift checks
 packages/support     Laravel-style helpers (config, env, abort, logger, context)
 packages/testing     isolated PostgreSQL test databases
 packages/cli         CLI runtime, commands, app + make:crud generators
+packages/ai-mcp      MCP server bridging the app CLI and docs for AI agents
 apps/playground      reference application (products module)
 apps/docs            Starlight documentation site (MDX, Cloudflare)
 deployment/          local PostgreSQL + Redis (compose)
@@ -83,3 +85,11 @@ the module, then typechecks and runs the suite against an isolated
 PostgreSQL database. Use `--dry-run` to preview, `--table <export>` for
 existing tables, `--json` for machine output. `bun run cli -- list` shows
 every command and whether it is planned or implemented.
+
+## AI agents
+
+The framework ships an MCP server (`packages/ai-mcp`, registered via
+[`.mcp.json`](.mcp.json), or `bun run mcp`) that exposes the application CLI — catalog,
+scaffolding, migrations, queues, workflows, OpenAPI, checks — as structured tools plus the
+repository documentation as resources. Project skills in `.zcode/skills/` teach agents the
+workspace conventions. See [docs/ai.md](docs/ai.md).

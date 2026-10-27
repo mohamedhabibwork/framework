@@ -9,6 +9,94 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ## [Unreleased]
 
+### Tests
+
+- New direct suites for `@framework/validation` (envelope shape, field-path
+  rendering, 403-before-422 ordering, async authorization hooks) and
+  `@framework/testing` (missing-URL contract, create/drop idempotence,
+  production and application-URL guards, migration application, cleanup on
+  failure). Deepened `scheduler` (fire-payload bounds, TTL clamps, replace
+  overlap, direct fire-job rejection) and `events` (channel validation,
+  schema round-trip, dispatch error reporting, realtime fan-in, subscription
+  limits). 379 → 427 tests.
+- `@framework/ai-mcp`: tests moved to `packages/ai-mcp/tests` (now covered by
+  `bun run typecheck`) and extended to command admission, argument
+  validation, banned-flag stripping, envelope fallbacks, docs-search clamping
+  and the published `checks` schema.
+- Queue retry/timeout tests use scheduler-tolerant margins (50ms backoff,
+  200ms timeout against a 2s handler) so the suite stays deterministic under
+  coverage instrumentation and parallel load.
+
+### Fixes
+
+- `@framework/ai-mcp`: the `checks` tool declares `kind` as required in its
+  published schema (it was optional but required in practice); the MCP server
+  reports the application's framework version instead of a hardcoded
+  `0.1.0`; `searchDocs` honors a zero limit as zero matches.
+- Removed stale `@framework/testing` devDependencies from five packages that
+  never imported it (cache, logging, mail, notifications, storage).
+
+### Features
+
+- Seven more Laravel-style generators moved from planned to implemented:
+  `make:mail` (typed mailable with HTML-escaped interpolation and a send
+  helper), `make:notification` (`--channels`, one builder per channel),
+  `make:command` (application commands in `app/commands`, appended to the
+  catalog in `bin/cli.ts`; new `app` command group), `make:schedule`
+  (`--job`/`--workflow`, validated five-field cron, `@framework:schedules`
+  registry), `make:guard` (header-credential `ActorResolver`),
+  `make:user-provider` (`UserProvider` decorating `DatabaseUserProvider`) and
+  `make:migration` (empty custom SQL migration via `drizzle-kit generate
+  --custom`). Package-importing generators refuse when the app lacks the
+  dependency. Covered by the scaffold-generator gate (input validation,
+  registry wiring, generated command execution, journal entry, typecheck).
+- The playground depends on `@framework/mail` and `@framework/notifications`
+  and its schedule registry carries the `@framework:schedules` marker.
+
+- Thirteen scaffold generators moved from planned to implemented:
+  `make:schema`, `make:repository`, `make:dto`, `make:request`, `make:response`,
+  `make:service`, `make:controller`, `make:policy`, `make:middleware`,
+  `make:provider`, `make:event`, `make:listener` and `make:test`. The eight
+  resource slices render through the `make:crud` pipeline (byte-identical
+  single artifacts, actionable prerequisite errors, `--module`/`--table`
+  overrides); the runtime scaffolds register through app markers — a new
+  `@framework:middleware` alias marker and an `app/listeners` registry
+  (consumed by a generated `listenersProvider` subscribing at boot) join the
+  existing `@framework:providers`/`@framework:schema-exports` markers in
+  generated apps and the playground. Gate-tested as a batch
+  (`packages/cli/tests/generators.test.ts`: dry-run byte-neutrality, conflict
+  refusal, registration visible to `module:list`/`middleware:list`/
+  `db:generate`, one typecheck over all generated code).
+- Per-status OpenAPI error schemas: every declared error status emits an
+  `ErrorEnvelope<status>` component whose `code` is the exact
+  `ERROR_CATALOG` enum for that status (422 additionally carries `fields`).
+  The catalog moved to `@framework/core` (re-exported from
+  `@framework/http` unchanged) so `@framework/openapi` derives the enums
+  without a dependency on the HTTP kernel; `ErrorStatusCode` now also covers
+  405/415/503. Generated specs with a committed snapshot will report drift
+  once — regenerate with `openapi:generate`.
+- Coverage gate: `bun run coverage` runs the whole suite with lcov coverage,
+  aggregates per package and enforces line/function thresholds
+  (scripts/coverage.ts; `--report` measures without enforcing). Test files
+  and template-literal generator files are excluded via `bunfig.toml`; CI now
+  runs the gate in place of the bare test step.
+- AI integration layer: `@framework/ai-mcp`, a Model Context Protocol server
+  that bridges the application CLI in-process (embeddable `runCli`, no child
+  process, `--json --no-interaction` enforced) and exposes structured tools
+  for discovery, scaffolding (`crud_scaffold`, `auth_install`), database
+  lifecycle, queues, workflows, OpenAPI, project checks and whitelisted
+  documentation search/read — plus `fwdocs://` resources. Registered via
+  `.mcp.json`; documented in `docs/ai.md`.
+- Project agent skills under `.zcode/skills/` (`hono-framework`,
+  `hono-framework-crud`, `hono-framework-auth`, `hono-framework-testing`,
+  `hono-framework-ops`) encoding the workspace conventions: the envelope
+  contract, migration discipline, generator ownership rules, auth defaults
+  and the release gate.
+- Application CLI entries (`create` template and the playground) now export
+  their `project` adapter and only execute under `import.meta.main`, making
+  generated apps embeddable by AI tooling while behaving identically as
+  CLIs.
+
 ### Security
 
 - Guardable admin route families (`workflowRoutes`, `auditRoutes`,
