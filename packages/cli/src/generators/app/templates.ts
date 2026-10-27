@@ -1068,7 +1068,7 @@ const openSessionStore = authInstalled
 export const project = defineProject({
   name: '${name}',
   root,
-  frameworkVersion: '0.1.0',
+  frameworkVersion: '0.2.0',
   apiPrefix: '/api/v1',
   paths: {
     modules: 'app/modules',
@@ -1123,7 +1123,7 @@ if (import.meta.main) {
     argv: process.argv.slice(2),
     project,
     commands: frameworkCommands,
-    cliVersion: '0.1.0',
+    cliVersion: '0.2.0',
   });
 }
 `;

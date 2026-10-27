@@ -9,6 +9,8 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-27
+
 ### Tests
 
 - New direct suites for `@framework/validation` (envelope shape, field-path
@@ -96,25 +98,6 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   their `project` adapter and only execute under `import.meta.main`, making
   generated apps embeddable by AI tooling while behaving identically as
   CLIs.
-
-### Security
-
-- Guardable admin route families (`workflowRoutes`, `auditRoutes`,
-  `importExportRoutes`) now require mount-time authorization: a guard
-  callback, ready-made auth middleware (`requireAuth()`,
-  `requireAbility(...)`) or the explicit `'public'` opt-out. Guards run
-  before validation, so anonymous callers get 401/403 instead of schema
-  disclosure through 422 field errors.
-- The HTTP kernel ships strict security headers by default
-  (`STRICT_SECURE_HEADERS`: CSP, HSTS, frame-deny, no-referrer, COOP/CORP)
-  with a config knob (`http.secureHeaders`), and config-driven CORS
-  (`http.corsOrigins`, off by default).
-- Generic `throttle` middleware over the cache rate limiter (structural
-  contract — no new dependency), wired as an `api` group alias with
-  `http.throttle` config knobs and 429 + `Retry-After` responses.
-
-### Features
-
 - Email verification: single-use hashed tokens (`account_tokens`),
   `verified()` middleware, `/auth/email/*` endpoints, delivery via app
   notifier hooks.
@@ -148,6 +131,22 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   probing database, Redis and the queue.
 - Duplicate-route detection catches the same handler (e.g. a sub-app)
   mounted twice back to back — the previous blind spot.
+
+### Security
+
+- Guardable admin route families (`workflowRoutes`, `auditRoutes`,
+  `importExportRoutes`) now require mount-time authorization: a guard
+  callback, ready-made auth middleware (`requireAuth()`,
+  `requireAbility(...)`) or the explicit `'public'` opt-out. Guards run
+  before validation, so anonymous callers get 401/403 instead of schema
+  disclosure through 422 field errors.
+- The HTTP kernel ships strict security headers by default
+  (`STRICT_SECURE_HEADERS`: CSP, HSTS, frame-deny, no-referrer, COOP/CORP)
+  with a config knob (`http.secureHeaders`), and config-driven CORS
+  (`http.corsOrigins`, off by default).
+- Generic `throttle` middleware over the cache rate limiter (structural
+  contract — no new dependency), wired as an `api` group alias with
+  `http.throttle` config knobs and 429 + `Retry-After` responses.
 
 ### Documentation
 
@@ -208,4 +207,5 @@ subsystems and the Starlight documentation site. See the
 - Workspace scaffolding and tooling
 
 [Unreleased]: https://framework.habib.cloud/releases/
+[0.2.0]: https://framework.habib.cloud/releases/
 [0.1.0]: https://framework.habib.cloud/releases/

@@ -11,12 +11,14 @@
  * - Refuses unless the git tree is clean, the version is a strict semver bump
  *   (`X.Y.Z`, greater than the current root package version) and — unless
  *   `--skip-checks` is passed — `bun run typecheck` and `bun run test` pass.
- * - Updates the root `package.json` version and every
- *   `frameworkVersion: '…'` pin in the generated-app template
- *   (packages/cli/src/generators/app/templates.ts). The version-sync test
- *   keeps these aligned between releases.
- * - Prepends a `## [X.Y.Z] — date` section to CHANGELOG.md grouped from the
- *   commit subjects since the last tag (conventional-commit prefix stripped).
+ * - Updates the root and every workspace package's `package.json` version,
+ *   and every `frameworkVersion: '…'` / `cliVersion: '…'` pin in the
+ *   generated-app template and the reference apps' `bin/cli.ts`. The
+ *   version-sync test keeps these aligned between releases.
+ * - Turns the curated `## [Unreleased]` notes into the `## [X.Y.Z] — date`
+ *   section (leaving Unreleased empty); when Unreleased is empty, the section
+ *   is grouped from the commit subjects since the last tag instead
+ *   (conventional-commit prefix stripped).
  * - Commits everything as `chore(release): vX.Y.Z` and tags `vX.Y.Z`. The
  *   docs snapshot (when triggered) is folded into that same commit so the
  *   tree ends clean.
@@ -27,7 +29,7 @@
  * (`bun run docs:deploy` when ready) and pushing to a remote.
  */
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
@@ -108,11 +110,33 @@ const subjects = run('git', ['log', '--format=%s', range], { capture: true })
 
 writeFileSync(packageJsonPath, `${JSON.stringify({ ...packageJson, version }, null, 2)}\n`);
 
-const templates = readFileSync(templatesPath, 'utf8');
-if (!/frameworkVersion:\s*'[^']*'/.test(templates)) fail(`no frameworkVersion pin found in ${templatesPath}`);
-const updatedTemplates = templates.replaceAll(/frameworkVersion:\s*'[^']*'/g, `frameworkVersion: '${version}'`);
-writeFileSync(templatesPath, updatedTemplates);
-print(`Pinned frameworkVersion to ${version} in packages/cli/src/generators/app/templates.ts.`);
+for (const dir of ['packages', 'apps']) {
+  for (const entry of readdirSync(join(repoRoot, dir), { withFileTypes: true })) {
+    const manifestPath = join(repoRoot, dir, entry.name, 'package.json');
+    if (!entry.isDirectory() || !Bun.file(manifestPath).size) continue;
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { version?: string };
+    // Workspace packages carry the framework version; apps without one (and the
+    // docs site's own 0.0.x line) are left alone.
+    if (dir === 'packages' && manifest.version !== undefined) {
+      writeFileSync(manifestPath, `${JSON.stringify({ ...manifest, version }, null, 2)}\n`);
+    }
+  }
+}
+print(`Bumped workspace package versions to ${version}.`);
+
+const VERSION_PIN = /(frameworkVersion|cliVersion):\s*'[^']*'/g;
+const pinFiles = [
+  templatesPath,
+  ...readdirSync(join(repoRoot, 'apps'))
+    .map((name) => join(repoRoot, 'apps', name, 'bin', 'cli.ts'))
+    .filter((path) => Bun.file(path).size > 0),
+];
+if (!/frameworkVersion:\s*'[^']*'/.test(readFileSync(templatesPath, 'utf8')))
+  fail(`no frameworkVersion pin found in ${templatesPath}`);
+for (const path of pinFiles) {
+  writeFileSync(path, readFileSync(path, 'utf8').replaceAll(VERSION_PIN, `$1: '${version}'`));
+}
+print(`Pinned frameworkVersion/cliVersion to ${version} in ${pinFiles.length} files.`);
 
 writeFileSync(
   changelogPath,
@@ -138,7 +162,7 @@ if (!run('git', ['tag', `v${version}`]).ok) fail('git tag failed');
 print(`\nRelease v${version} prepared from ${range} (${subjects.length} commits).`);
 print('Done:');
 print('  - root package.json version bumped');
-print('  - generated-app template frameworkVersion pins updated');
+print('  - workspace package versions and frameworkVersion/cliVersion pins updated');
 print('  - CHANGELOG.md section prepended');
 if (snapshotRan) {
   print(`  - previous docs line archived via snapshot-version.mjs (docs locale v${newLine.replaceAll('.', '')})`);
@@ -198,6 +222,9 @@ function prependChangelog(changelog: string, releaseVersion: string, section: st
   if (startIndex === -1) fail('CHANGELOG.md has no "## [Unreleased]" section');
   const nextHeading = changelog.indexOf('\n## [', startIndex + unreleased.length);
   const insertAt = nextHeading === -1 ? changelog.length : nextHeading + 1;
-  const withSection = `${changelog.slice(0, insertAt)}\n${section}${changelog.slice(insertAt)}`;
+  // Curated notes win over commit subjects; Unreleased starts over empty.
+  const curated = changelog.slice(startIndex + unreleased.length, insertAt).trim();
+  const body = curated ? `${section.split('\n')[0]}\n\n${curated}\n` : section;
+  const withSection = `${changelog.slice(0, startIndex)}${unreleased}\n\n${body}\n${changelog.slice(insertAt)}`;
   return `${withSection.trimEnd()}\n[${releaseVersion}]: https://framework.habib.cloud/releases/\n`;
 }

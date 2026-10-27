@@ -20,9 +20,9 @@
  */
 export const docsVersions = {
 	/** The docs line matching the current framework release. */
-	latest: '0.1',
+	latest: '0.2',
 	/** Every docs line, newest first. */
-	lines: ['0.1'],
+	lines: ['0.2', '0.1'],
 } as const;
 
 export type DocsVersionLine = (typeof docsVersions.lines)[number];

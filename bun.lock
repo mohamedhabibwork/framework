@@ -83,7 +83,7 @@
     },
     "packages/ai-mcp": {
       "name": "@framework/ai-mcp",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "bin": {
         "framework-mcp": "./src/index.ts",
       },
@@ -94,7 +94,7 @@
     },
     "packages/auth": {
       "name": "@framework/auth",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/cache": "workspace:*",
         "@framework/core": "workspace:*",
@@ -112,7 +112,7 @@
     },
     "packages/cache": {
       "name": "@framework/cache",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@mohamedhabibwork/cachekit": "0.2.1",
@@ -121,7 +121,7 @@
     },
     "packages/cli": {
       "name": "@framework/cli",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/database": "workspace:*",
@@ -142,14 +142,14 @@
     },
     "packages/core": {
       "name": "@framework/core",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "zod": "4.6.5",
       },
     },
     "packages/crud": {
       "name": "@framework/crud",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/database": "workspace:*",
@@ -168,7 +168,7 @@
     },
     "packages/database": {
       "name": "@framework/database",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/http": "workspace:*",
@@ -183,7 +183,7 @@
     },
     "packages/events": {
       "name": "@framework/events",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "hono": "4.13.12",
@@ -192,7 +192,7 @@
     },
     "packages/http": {
       "name": "@framework/http",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "hono": "4.13.12",
@@ -204,7 +204,7 @@
     },
     "packages/logging": {
       "name": "@framework/logging",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@mohamedhabibwork/loggerkit": "0.2.2",
@@ -213,7 +213,7 @@
     },
     "packages/mail": {
       "name": "@framework/mail",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "zod": "4.6.5",
@@ -221,7 +221,7 @@
     },
     "packages/notifications": {
       "name": "@framework/notifications",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/mail": "workspace:*",
@@ -232,7 +232,7 @@
     },
     "packages/oauth-server": {
       "name": "@framework/oauth-server",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/auth": "workspace:*",
         "@framework/cache": "workspace:*",
@@ -250,7 +250,7 @@
     },
     "packages/observatory": {
       "name": "@framework/observatory",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/database": "workspace:*",
@@ -267,7 +267,7 @@
     },
     "packages/openapi": {
       "name": "@framework/openapi",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "zod": "4.6.5",
@@ -275,14 +275,14 @@
     },
     "packages/prompts": {
       "name": "@framework/prompts",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
       },
     },
     "packages/queue": {
       "name": "@framework/queue",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@mohamedhabibwork/queuekit": "0.4.1",
@@ -293,7 +293,7 @@
     },
     "packages/scheduler": {
       "name": "@framework/scheduler",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/queue": "workspace:*",
@@ -303,7 +303,7 @@
     },
     "packages/search": {
       "name": "@framework/search",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/database": "workspace:*",
@@ -319,7 +319,7 @@
     },
     "packages/socialite": {
       "name": "@framework/socialite",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/auth": "workspace:*",
         "@framework/cache": "workspace:*",
@@ -335,7 +335,7 @@
     },
     "packages/storage": {
       "name": "@framework/storage",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@mohamedhabibwork/storagekit": "0.6.1",
@@ -344,7 +344,7 @@
     },
     "packages/support": {
       "name": "@framework/support",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/http": "workspace:*",
@@ -352,7 +352,7 @@
     },
     "packages/testing": {
       "name": "@framework/testing",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/database": "workspace:*",
@@ -361,7 +361,7 @@
     },
     "packages/validation": {
       "name": "@framework/validation",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/http": "workspace:*",
         "@hono/zod-validator": "0.9.1",
@@ -371,7 +371,7 @@
     },
     "packages/workflow": {
       "name": "@framework/workflow",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/database": "workspace:*",

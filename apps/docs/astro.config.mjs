@@ -36,6 +36,7 @@ export default defineConfig({
 			locales: {
 				root: { label: `English (${formatLine(docsVersions.latest)})`, lang: 'en' },
 				ar: { label: 'العربية', lang: 'ar', dir: 'rtl' },
+				v01: { label: 'v0.1', lang: 'en' },
 			},
 			sidebar: sidebarFor(docsVersions.latest),
 			components: {
