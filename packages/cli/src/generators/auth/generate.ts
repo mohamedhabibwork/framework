@@ -9,6 +9,24 @@ import { type AuthFiles, authFiles, renderAuthIndex, renderAuthProvider, renderA
 const BOOTSTRAP_HTTP = 'bootstrap/http.ts';
 const ROUTE_MOUNT = ".route('/api/v1/auth', authRoutes(config))";
 
+/** Framework auth tables re-exported from the app's schema index. */
+const AUTH_TABLE_EXPORTS = ['accountTokens', 'apiTokens', 'sessions', 'totpRecoveryCodes', 'users'] as const;
+
+/** Line width of the generated app's `biome.json` formatter (see app templates). */
+const FORMATTER_LINE_WIDTH = 120;
+
+/**
+ * The `@framework:schema-exports` statement for the auth tables, emitted in the
+ * exact shape Biome's formatter produces: a single line when it fits, otherwise
+ * one name per line. Keeps generated output lint-clean even with a long
+ * workspace-relative specifier.
+ */
+function authSchemaExport(specifier: string): string {
+  const oneLine = `export { ${AUTH_TABLE_EXPORTS.join(', ')} } from '${specifier}';`;
+  if (oneLine.length <= FORMATTER_LINE_WIDTH) return oneLine;
+  return `export {\n  ${AUTH_TABLE_EXPORTS.join(',\n  ')},\n} from '${specifier}';`;
+}
+
 /** Nearest enclosing framework workspace (a directory owning packages/cli), if any. */
 async function frameworkWorkspaceRoot(from: string): Promise<string | null> {
   let current = resolve(from);
@@ -92,12 +110,7 @@ export async function planAuth(
     {
       path: paths.schemaIndex,
       transform: (source) =>
-        insertAfterMarker(
-          source,
-          '@framework:schema-exports',
-          `export { accountTokens, apiTokens, sessions, totpRecoveryCodes, users } from '${tablesSpecifier}';`,
-          paths.schemaIndex,
-        ),
+        insertAfterMarker(source, '@framework:schema-exports', authSchemaExport(tablesSpecifier), paths.schemaIndex),
     },
     {
       path: paths.providers,

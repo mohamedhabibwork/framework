@@ -8,27 +8,7 @@ import { unsupported } from '../errors';
 const PLANNED: readonly [string, CommandGroup, string][] = [
   ['integration:list', 'project', 'Show configured adapters, versions and capabilities'],
   ['integration:check', 'project', 'Validate adapter compatibility and optional connectivity'],
-  ['make:controller', 'generators', 'Controller, optional CRUD handlers'],
-  ['make:request', 'generators', 'Form request importing the canonical Drizzle–Zod schema'],
-  ['make:response', 'generators', 'Public response schema and serializer'],
-  ['make:dto', 'generators', 'Inferred Zod input/output DTO types'],
-  ['make:service', 'generators', 'Business service with explicit dependencies'],
-  ['make:repository', 'generators', 'Typed Drizzle repository'],
   ['make:model', 'generators', 'Thin model metadata/serialization'],
-  ['make:schema', 'generators', 'Drizzle table definition and schema export'],
-  ['make:migration', 'generators', 'Custom SQL migration'],
-  ['make:policy', 'generators', 'Resource policy'],
-  ['make:middleware', 'generators', 'Native typed Hono middleware'],
-  ['make:provider', 'generators', 'Provider lifecycle factory'],
-  ['make:guard', 'generators', 'Authentication guard implementation'],
-  ['make:user-provider', 'generators', 'Principal lookup implementation'],
-  ['make:event', 'generators', 'Typed event contract'],
-  ['make:listener', 'generators', 'Event listener with optional job dispatch'],
-  ['make:mail', 'generators', 'Message builder and email template'],
-  ['make:notification', 'generators', 'Notification with explicit channels'],
-  ['make:command', 'generators', 'Application CLI command'],
-  ['make:schedule', 'generators', 'Explicit scheduled task registration'],
-  ['make:test', 'generators', 'Meaningful test scaffold'],
   ['make:integration', 'generators', 'Optional lifecycle adapter'],
   // Migrations are forward-only by decision (ADR): roll back by authoring a
   // new forward migration, or reset a non-production target with `db:fresh`.
@@ -36,6 +16,15 @@ const PLANNED: readonly [string, CommandGroup, string][] = [
   ['cache:prune', 'cache', 'Adapter-supported expiry cleanup'],
   ['storage:link', 'storage', 'Link a configured local public disk'],
   ['storage:prune', 'storage', 'Remove framework-owned temporary uploads'],
+  // First-party package equivalents (E-series). Listed as planned so the
+  // catalog is honest until the subsystem tasks land (E05/E09/E11/E12).
+  ['oauth:client:create', 'oauth', 'Register an OAuth2 client (confidential or public)'],
+  ['oauth:client:list', 'oauth', 'List registered OAuth2 clients'],
+  ['oauth:key:generate', 'oauth', 'Generate the OAuth server signing key pair (JWKS)'],
+  ['observatory:list', 'observatory', 'List recent observatory entries'],
+  ['observatory:prune', 'observatory', 'Prune observatory entries older than a date'],
+  ['observatory:clear', 'observatory', 'Clear all observatory entries'],
+  ['socialite:providers', 'socialite', 'List configured social login providers'],
 ];
 
 export const plannedCommands: Command[] = PLANNED.map(([name, group, description]) =>

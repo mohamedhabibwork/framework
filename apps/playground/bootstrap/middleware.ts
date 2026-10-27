@@ -16,16 +16,19 @@ import type { AppConfig } from '../config';
  * tighter per-flow limits (login) keep their dedicated wiring.
  */
 export function createMiddleware(config: AppConfig): MiddlewareRegistry {
-  return new MiddlewareRegistry()
-    .alias(
-      'throttle',
-      throttle({
-        limiter: (c) => resolve(c, RATE_LIMITER),
-        enabled: config.http.throttle.enabled,
-        limit: config.http.throttle.limit,
-        windowSeconds: config.http.throttle.windowSeconds,
-        prefix: 'http.api',
-      }),
-    )
-    .group('api', ['throttle']);
+  return (
+    new MiddlewareRegistry()
+      .alias(
+        'throttle',
+        throttle({
+          limiter: (c) => resolve(c, RATE_LIMITER),
+          enabled: config.http.throttle.enabled,
+          limit: config.http.throttle.limit,
+          windowSeconds: config.http.throttle.windowSeconds,
+          prefix: 'http.api',
+        }),
+      )
+      // @framework:middleware
+      .group('api', ['throttle'])
+  );
 }

@@ -1,5 +1,6 @@
 import type { ServiceProvider } from '@framework/core';
 import { workflowProvider } from '@framework/workflow';
+import { listenersProvider } from '../app/listeners/listeners.provider';
 import { productsProvider } from '../app/modules/products';
 import { authProvider } from '../app/providers/auth.provider';
 import { cacheProvider } from '../app/providers/cache.provider';
@@ -15,6 +16,7 @@ import type { AppConfig } from '../config';
 export const providers: readonly ServiceProvider<AppConfig>[] = [
   databaseProvider,
   eventsProvider,
+  listenersProvider,
   // Before authProvider: auth binds the login rate limiter from the cache
   // stack while registering (container.has(RATE_LIMITER)).
   cacheProvider,

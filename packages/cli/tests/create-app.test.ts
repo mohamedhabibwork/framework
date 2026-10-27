@@ -29,6 +29,10 @@ function childEnv(): Record<string, string | undefined> {
     TEST_DATABASE_URL: requireTestDatabaseUrl(),
     // Route/config inspection never connects; the URL only satisfies validation.
     DATABASE_URL: 'postgres://app:unused@127.0.0.1:1/unused',
+    // Bun hides passing test names when it detects an AI agent; the gates
+    // assert on those names, so the nested `bun test` must report normally.
+    CLAUDECODE: undefined,
+    AGENT: undefined,
   };
 }
 
@@ -59,7 +63,7 @@ afterAll(async () => {
       () => undefined,
     );
   }
-});
+}, TIMEOUT);
 
 describe('create (app startup generator)', () => {
   beforeAll(async () => {
@@ -81,7 +85,7 @@ describe('create (app startup generator)', () => {
       Bun.spawn(['bun', 'install'], { cwd: WORKSPACE, env: childEnv(), stdout: 'pipe', stderr: 'pipe' }),
     );
     expect(install.code).toBe(0);
-  });
+  }, TIMEOUT);
 
   test('refuses non-empty directories and invalid names', async () => {
     const invalid = await capture(
@@ -347,7 +351,7 @@ describe('create --with-demo (one-command full generation)', () => {
     const body = JSON.parse(created.stdout) as { data: { demo: { module: string } | null } };
     expect(body.data.demo).toMatchObject({ module: 'products' });
     app = join(WORKSPACE, 'apps/created-demo');
-  });
+  }, TIMEOUT);
 
   test(
     'the generated app ships a products module with migration and passing endpoint tests',

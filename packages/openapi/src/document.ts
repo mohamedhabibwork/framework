@@ -1,8 +1,8 @@
-import type { JsonObject } from '@framework/core';
+import { codesForStatus, type JsonObject } from '@framework/core';
 import { z } from 'zod/v4';
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
-export type ErrorStatusCode = 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500;
+export type ErrorStatusCode = 400 | 401 | 403 | 404 | 405 | 409 | 413 | 415 | 422 | 429 | 500 | 503;
 
 export interface OperationSpec {
   readonly method: HttpMethod;
@@ -54,21 +54,34 @@ const ERROR_DESCRIPTIONS: Record<ErrorStatusCode, string> = {
   401: 'Authentication required',
   403: 'Forbidden',
   404: 'Resource not found',
+  405: 'Method not allowed',
   409: 'Conflict',
   413: 'Payload too large',
+  415: 'Unsupported media type',
   422: 'Validation failed',
   429: 'Too many requests',
   500: 'Internal server error',
+  503: 'Service unavailable',
 };
 
-export const errorEnvelopeSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    message: z.string(),
-    fields: z.array(z.object({ path: z.string(), message: z.string(), code: z.string() })).optional(),
-    requestId: z.string().optional(),
-  }),
-});
+/**
+ * One envelope schema per status: `error.code` is an enum of exactly the
+ * catalog codes that can be returned with that status. Only 422 carries
+ * `fields` — it is the only status that ever produces them.
+ */
+export function errorEnvelopeSchema(status: ErrorStatusCode) {
+  const codes = codesForStatus(status);
+  return z.object({
+    error: z.object({
+      code: codes.length > 0 ? z.enum(codes) : z.string(),
+      message: z.string(),
+      ...(status === 422
+        ? { fields: z.array(z.object({ path: z.string(), message: z.string(), code: z.string() })).optional() }
+        : {}),
+      requestId: z.string().optional(),
+    }),
+  });
+}
 
 /**
  * Zod -> JSON Schema (2020-12, as used by OpenAPI 3.1). Refinements and
@@ -104,7 +117,7 @@ function operationObject(operation: Operation) {
   for (const status of operation.errors ?? []) {
     responses[String(status)] = {
       description: ERROR_DESCRIPTIONS[status],
-      content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } },
+      content: { 'application/json': { schema: { $ref: `#/components/schemas/ErrorEnvelope${status}` } } },
     };
   }
   return {
@@ -128,11 +141,17 @@ function operationObject(operation: Operation) {
 export function generateOpenApiDocument(options: DocumentOptions) {
   const ids = new Set<string>();
   const paths: Record<string, Record<string, object>> = {};
+  const errorStatuses = new Set<ErrorStatusCode>();
   for (const operation of options.operations) {
     if (ids.has(operation.operationId)) throw new Error(`Duplicate operationId "${operation.operationId}"`);
     ids.add(operation.operationId);
     const path = toOpenApiPath(operation.fullPath);
     paths[path] = { ...paths[path], [operation.method]: operationObject(operation) };
+    for (const status of operation.errors ?? []) errorStatuses.add(status);
+  }
+  const errorSchemas: Record<string, object> = {};
+  for (const status of [...errorStatuses].sort((a, b) => a - b)) {
+    errorSchemas[`ErrorEnvelope${status}`] = jsonSchema(errorEnvelopeSchema(status), 'output');
   }
   return {
     openapi: '3.1.0',
@@ -143,7 +162,7 @@ export function generateOpenApiDocument(options: DocumentOptions) {
     },
     paths,
     components: {
-      schemas: { ErrorEnvelope: jsonSchema(errorEnvelopeSchema, 'output') },
+      schemas: errorSchemas,
       ...(options.securitySchemes ? { securitySchemes: options.securitySchemes } : {}),
     },
   };

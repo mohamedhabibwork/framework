@@ -25,6 +25,10 @@ function childEnv(): Record<string, string | undefined> {
     TEST_DATABASE_URL: requireTestDatabaseUrl(),
     // Route/config inspection never connects; the URL only satisfies validation.
     DATABASE_URL: 'postgres://app:unused@127.0.0.1:1/unused',
+    // Bun hides passing test names when it detects an AI agent; the gates
+    // assert on those names, so the nested `bun test` must report normally.
+    CLAUDECODE: undefined,
+    AGENT: undefined,
   };
 }
 
@@ -64,7 +68,7 @@ beforeAll(async () => {
     Bun.spawn(['bun', 'install'], { cwd: WORKSPACE, env: childEnv(), stdout: 'pipe', stderr: 'pipe' }),
   );
   expect(install.code).toBe(0);
-});
+}, TIMEOUT);
 
 afterAll(async () => {
   await rm(join(WORKSPACE, 'apps/created-auth'), { recursive: true, force: true }).catch(() => undefined);
@@ -75,7 +79,7 @@ afterAll(async () => {
       () => undefined,
     );
   }
-});
+}, TIMEOUT);
 
 describe('Phase 3 gate: authenticated CRUD in a generated app', () => {
   test(

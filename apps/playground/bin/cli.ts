@@ -17,7 +17,7 @@ const root = join(import.meta.dir, '..');
 const middleware = createMiddleware(await loadAppConfig({ envFile: join(root, '.env') }));
 
 /** Application-local CLI: the project root comes from this file, never from the shell's cwd. */
-const project = defineProject({
+export const project = defineProject({
   name: 'playground',
   root,
   frameworkVersion: '0.1.0',
@@ -30,6 +30,7 @@ const project = defineProject({
     migrations: 'database/migrations',
     apiRoutes: 'routes/api.ts',
     providers: 'bootstrap/providers.ts',
+    middleware: 'bootstrap/middleware.ts',
     openapi: 'bootstrap/openapi.ts',
     config: 'config/index.ts',
     testSupport: 'tests/support.ts',
@@ -90,9 +91,11 @@ const project = defineProject({
   openapi: () => ({ operations, build: buildOpenApiDocument }),
 });
 
-process.exitCode = await runCli({
-  argv: process.argv.slice(2),
-  project,
-  commands: frameworkCommands,
-  cliVersion: '0.1.0',
-});
+if (import.meta.main) {
+  process.exitCode = await runCli({
+    argv: process.argv.slice(2),
+    project,
+    commands: frameworkCommands,
+    cliVersion: '0.1.0',
+  });
+}

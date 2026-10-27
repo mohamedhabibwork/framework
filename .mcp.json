@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hono-framework": {
+      "command": "bun",
+      "args": ["run", "packages/ai-mcp/src/index.ts"],
+      "env": {
+        "FRAMEWORK_APP_DIR": "apps/playground"
+      }
+    }
+  }
+}

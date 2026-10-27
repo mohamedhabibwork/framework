@@ -1,7 +1,9 @@
 import { createInterface } from 'node:readline/promises';
 import { redact } from '@framework/core';
+import type { PromptAnswer } from '@framework/prompts';
 import { flag, GLOBAL_OPTIONS, parseArgs, splitCommand, stringOption } from './args';
 import type { Command, CommandContext } from './command';
+import { createCliPromptSession, mapPromptError } from './context/prompts';
 import { CliError, EXIT, type ExitCode, interrupted, usageError } from './errors';
 import { envelope } from './output';
 import type { ProjectAdapter } from './project';
@@ -15,6 +17,11 @@ export interface RunOptions {
   readonly stdout?: (text: string) => void;
   readonly stderr?: (text: string) => void;
   readonly isTTY?: boolean;
+  /**
+   * Injected prompt answers keyed by prompt message. Enables scripted,
+   * non-interactive runs (`--answers`); never read when absent.
+   */
+  readonly answers?: Readonly<Record<string, PromptAnswer>>;
 }
 
 export function helpText(command: Command): string[] {
@@ -77,6 +84,9 @@ export async function runCli(options: RunOptions): Promise<ExitCode> {
     }
 
     const interactive = (options.isTTY ?? Boolean(process.stdin.isTTY)) && !flag(parsed.options, 'no-interaction');
+    // `--json` and `--no-interaction` force the non-interactive paths (injected
+    // answers / defaults) and must never read the TTY (frozen contract, C3).
+    const promptInteractive = interactive && !json;
     const verbose = flag(parsed.options, 'verbose');
     const context: CommandContext = {
       root: stringOption(parsed.options, 'cwd') ?? options.project.root,
@@ -87,6 +97,7 @@ export async function runCli(options: RunOptions): Promise<ExitCode> {
       project: options.project,
       registry,
       signal: controller.signal,
+      prompts: createCliPromptSession({ interactive: promptInteractive, answers: options.answers }),
       print: (line) => {
         if (!json) stdout(line);
       },
@@ -109,6 +120,8 @@ export async function runCli(options: RunOptions): Promise<ExitCode> {
     return EXIT.OK;
   } catch (error) {
     if (controller.signal.aborted) return fail(interrupted());
+    const promptError = mapPromptError(error);
+    if (promptError) return fail(promptError);
     if (error instanceof CliError) return fail(error);
     const message = error instanceof Error ? error.message : String(error);
     if (!json) stderr(String(redact(error instanceof Error && error.stack ? error.stack : message)));

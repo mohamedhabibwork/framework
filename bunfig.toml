@@ -1,0 +1,10 @@
+# Coverage behavior for `bun test --coverage` (driven by scripts/coverage.ts,
+# which owns the per-package thresholds — bunfig thresholds only apply to the
+# text reporter and cannot be expressed per package).
+[test]
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = [
+  "**/generators/app/templates.ts",
+  "**/generators/crud/templates-*.ts",
+  "**/generators/scaffolds/templates-*.ts",
+]

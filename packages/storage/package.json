@@ -10,8 +10,5 @@
     "@framework/core": "workspace:*",
     "@mohamedhabibwork/storagekit": "0.6.1",
     "zod": "4.6.5"
-  },
-  "devDependencies": {
-    "@framework/testing": "workspace:*"
   }
 }

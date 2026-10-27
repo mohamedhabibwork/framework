@@ -104,6 +104,10 @@ export interface GracefulShutdownOptions {
   readonly signals?: readonly NodeJS.Signals[];
 }
 
+// -- Error catalog (owned by ./catalog) --------------------------------------
+
+export type { ErrorCode, ErrorStatus } from './catalog';
+
 // -- Pipelines (in-process) -----------------------------------------------------
 
 /** Continuation handed to a pipe: run the rest of the chain on a payload. */

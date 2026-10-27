@@ -10,8 +10,5 @@
     "@framework/core": "workspace:*",
     "@mohamedhabibwork/loggerkit": "0.2.2",
     "zod": "4.6.5"
-  },
-  "devDependencies": {
-    "@framework/testing": "workspace:*"
   }
 }

@@ -17,3 +17,5 @@ apps/*/storage/**
 .mimosa
 .v2c
 .wrangler
+# local AI-tool session memory
+.workbuddy-ai/

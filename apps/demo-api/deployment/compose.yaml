@@ -1,0 +1,66 @@
+# Development infrastructure (default profile) and the full application
+# stack (profile "app": server/worker containers from ./Dockerfile).
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: demo_api_test
+    ports:
+      - '127.0.0.1:5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: .
+    profiles: ['app']
+    command: ['bun', 'run', 'bin/server.ts']
+    ports:
+      - '3000:3000'
+    environment: &app-env
+      APP_ENV: production
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/demo_api_test
+      REDIS_URL: redis://redis:6379
+      CACHE_DRIVER: redis
+      CACHE_REDIS_URL: redis://redis:6379
+      CACHE_REDIS_PREFIX: demo-api-test
+      QUEUE_NAME: default
+      QUEUE_PREFIX: demo-api-test
+      EVENTS_DRIVER: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/health/ready']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  worker:
+    build: .
+    profiles: ['app']
+    command: ['bun', 'run', 'bin/worker.ts']
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped

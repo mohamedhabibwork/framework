@@ -27,7 +27,9 @@ const flaky = defineJob({
   version: 1,
   payload: z.object({ failTimes: z.number().int() }),
   attempts: 3,
-  backoffMs: 10,
+  // Generous backoff: coverage instrumentation slows the whole suite, and the
+  // retry semantics under test must not depend on scheduler precision.
+  backoffMs: 50,
   async handle(payload) {
     flakyCalls += 1;
     if (flakyCalls <= payload.failTimes) throw new Error(`transient failure ${flakyCalls}`);
@@ -40,7 +42,7 @@ const broken = defineJob({
   version: 1,
   payload: z.object({}),
   attempts: 2,
-  backoffMs: 10,
+  backoffMs: 50,
   async handle() {
     throw new Error('always fails');
   },
@@ -51,9 +53,9 @@ const slow = defineJob({
   version: 1,
   payload: z.object({}),
   attempts: 1,
-  timeoutMs: 50,
+  timeoutMs: 200,
   async handle() {
-    await Bun.sleep(500);
+    await Bun.sleep(2000);
     return null;
   },
 });
@@ -63,7 +65,7 @@ const flakyBatchEntry = defineJob({
   version: 1,
   payload: z.object({ failOnce: z.boolean() }),
   attempts: 2,
-  backoffMs: 10,
+  backoffMs: 50,
   async handle(payload) {
     if (payload.failOnce && flakyBatchCalls === 0) {
       flakyBatchCalls += 1;
@@ -165,7 +167,7 @@ describe('Queue (BullMQ on real Redis)', () => {
 
   test('jobs exceeding their timeout fail', async () => {
     const { id } = await manager.dispatch(slow, {}, context);
-    expect(await settle(id)).toMatchObject({ state: 'failed', failedReason: 'Job timed out after 50ms' });
+    expect(await settle(id)).toMatchObject({ state: 'failed', failedReason: 'Job timed out after 200ms' });
   });
 });
 

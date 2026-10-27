@@ -11,6 +11,8 @@ export interface ProjectPaths {
   readonly migrations: string;
   readonly apiRoutes: string;
   readonly providers: string;
+  /** Middleware registry module receiving `make:middleware` aliases. */
+  readonly middleware: string;
   readonly openapi: string;
   /** Module exporting the application's `AppConfig` type. */
   readonly config: string;

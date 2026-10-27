@@ -56,7 +56,7 @@ beforeAll(async () => {
   app = join(SCRATCH, `e2e-${randomBytes(4).toString('hex')}`);
   const copy = await run(['cp', '-R', STARTER, app], WORKSPACE);
   expect(copy.code).toBe(0);
-});
+}, GENERATOR_TIMEOUT_MS);
 
 afterAll(async () => {
   if (app) await rm(app, { recursive: true, force: true });

@@ -25,6 +25,7 @@ export { Readable } from './mixins/readable';
 export { SoftDeletable } from './mixins/soft-deletable';
 export { Updatable } from './mixins/updatable';
 export { mapPage, pageSchema, paginationQuerySchema, toPage } from './pagination/pagination';
+export { BaseRepository, BaseSoftDeletableRepository, baseRepository } from './repository/base-repository';
 export { toIsoTimestamp, toIsoTimestampOrNull } from './schema/timestamps';
 export { createInsertSchema, createSelectSchema, createUpdateSchema } from './schema/zod';
 export { TransactionContext } from './transactions/transaction-context';

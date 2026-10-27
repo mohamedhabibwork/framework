@@ -1,10 +1,17 @@
 import type { CommandContext } from '../../command';
 import { unsupported, usageError } from '../../errors';
+import type { ResourceNames } from '../naming';
 import { resourceNames } from '../naming';
 import { importPath, resolveInsideProject } from '../paths';
 import { buildChanges, type FileChange, type FileUpdate, type NewFile } from '../plan';
 import { addImport, insertAfterMarker } from '../registration';
-import { type Access, parseDefinitionFile, parseFieldSpec, type ResourceDefinition } from './definition';
+import {
+  type Access,
+  type FieldDefinition,
+  parseDefinitionFile,
+  parseFieldSpec,
+  type ResourceDefinition,
+} from './definition';
 import { type CrudFiles, crudFiles } from './files';
 import { introspectTable } from './introspect';
 import {
@@ -44,7 +51,7 @@ const USAGE_EXAMPLES = [
   'make:crud Product --module products --table products --access public',
 ].join('\n  ');
 
-async function resolveAccess(
+export async function resolveAccess(
   context: CommandContext,
   flagValue: string | undefined,
   fromFile?: Access,
@@ -75,7 +82,7 @@ async function resolveAccess(
   return access;
 }
 
-async function resolveFields(context: CommandContext, request: CrudRequest) {
+export async function resolveFields(context: CommandContext, request: CrudRequest) {
   if (request.definitionFile) {
     const file = Bun.file(resolveInsideProject(context.root, request.definitionFile));
     if (!(await file.exists())) throw usageError(`Definition file not found: ${request.definitionFile}`);
@@ -111,6 +118,61 @@ function resolveMount(context: CommandContext, request: CrudRequest, module: str
   return mount;
 }
 
+/** Assembles the resource definition for an existing Drizzle table export. */
+export async function assembleTableDefinition(
+  context: CommandContext,
+  names: ResourceNames,
+  args: {
+    readonly table: string;
+    readonly schemaFile: string;
+    readonly softDelete: boolean;
+    readonly access: Access;
+    readonly route?: string;
+  },
+): Promise<ResourceDefinition> {
+  const table = await introspectTable(context.root, args.schemaFile, args.table);
+  if (args.softDelete && !table.hasDeletedAt) {
+    throw usageError(`--soft-delete requires a string-mode "deletedAt" column on ${args.table}`);
+  }
+  return {
+    names,
+    fields: table.fields,
+    primaryKey: table.primaryKey,
+    timestamps: table.timestamps,
+    softDelete: args.softDelete,
+    access: args.access,
+    source: 'existing',
+    mount: resolveMount(context, { route: args.route } as CrudRequest, names.module),
+    tableExport: args.table,
+    schemaFile: args.schemaFile,
+  };
+}
+
+/** Assembles the resource definition for a new table authored from fields. */
+export function assembleNewTableDefinition(
+  context: CommandContext,
+  names: ResourceNames,
+  args: {
+    readonly fields: readonly FieldDefinition[];
+    readonly softDelete: boolean;
+    readonly access: Access;
+    readonly route?: string;
+  },
+): ResourceDefinition {
+  return {
+    names,
+    fields: args.fields,
+    primaryKey: 'uuid',
+    timestamps: { createdAt: true, updatedAt: true },
+    softDelete: args.softDelete,
+    access: args.access,
+    source: 'new',
+    mount: resolveMount(context, { route: args.route } as CrudRequest, names.module),
+    tableExport: names.pluralCamel,
+    schemaFile: `${context.project.paths.schemaDir}/${names.pluralKebab}.ts`,
+  };
+}
+
 /** Builds the resource definition from --table (introspection), --definition or --fields. */
 export async function resolveDefinition(context: CommandContext, request: CrudRequest): Promise<ResourceDefinition> {
   if (request.table && (request.fields || request.definitionFile)) {
@@ -125,38 +187,23 @@ export async function resolveDefinition(context: CommandContext, request: CrudRe
   if (request.table) {
     const names = resourceNames(request.resource, { module: request.module });
     const schemaFile = request.schemaFile ?? paths.schemaIndex;
-    const table = await introspectTable(context.root, schemaFile, request.table);
-    if (request.softDelete && !table.hasDeletedAt) {
-      throw usageError(`--soft-delete requires a string-mode "deletedAt" column on ${request.table}`);
-    }
-    return {
-      names,
-      fields: table.fields,
-      primaryKey: table.primaryKey,
-      timestamps: table.timestamps,
+    return assembleTableDefinition(context, names, {
+      table: request.table,
+      schemaFile,
       softDelete: request.softDelete,
       access: await resolveAccess(context, request.access),
-      source: 'existing',
-      mount: resolveMount(context, request, names.module),
-      tableExport: request.table,
-      schemaFile,
-    };
+      route: request.route,
+    });
   }
 
   const names = resourceNames(request.resource, { module: request.module });
   const parsed = await resolveFields(context, request);
-  return {
-    names,
+  return assembleNewTableDefinition(context, names, {
     fields: parsed.fields,
-    primaryKey: 'uuid',
-    timestamps: { createdAt: true, updatedAt: true },
     softDelete: parsed.softDelete || request.softDelete,
     access: await resolveAccess(context, request.access, parsed.access),
-    source: 'new',
-    mount: resolveMount(context, request, names.module),
-    tableExport: names.pluralCamel,
-    schemaFile: `${paths.schemaDir}/${names.pluralKebab}.ts`,
-  };
+    route: request.route,
+  });
 }
 
 function renderFiles(context: CommandContext, def: ResourceDefinition, files: CrudFiles): NewFile[] {
@@ -259,7 +306,14 @@ export const ENDPOINTS = (def: ResourceDefinition) =>
   [
     ['POST', def.mount, 201],
     ['GET', def.mount, 200],
+    ...(def.softDelete
+      ? [
+          ['GET', `${def.mount}/deleted`, 200],
+          ['GET', `${def.mount}/deleted/:id`, 200],
+        ]
+      : []),
     ['GET', `${def.mount}/:id`, 200],
     ['PATCH', `${def.mount}/:id`, 200],
     ['DELETE', `${def.mount}/:id`, 204],
+    ...(def.softDelete ? [['POST', `${def.mount}/:id/restore`, 200]] : []),
   ].map(([method, route, status]) => ({ method: String(method), route: String(route), status: Number(status) }));

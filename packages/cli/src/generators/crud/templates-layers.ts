@@ -153,7 +153,7 @@ export function renderPolicy(def: ResourceDefinition): string {
     const ability = (name: string) => `'${def.names.pluralCamel}.${name}'`;
     return [
       "import { type Context } from 'hono';",
-      "import { type FrameworkEnv, currentPrincipal, denyAll, hasAbility, type ResourcePolicy } from '@framework/http';",
+      "import { currentPrincipal, denyAll, type FrameworkEnv, hasAbility, type ResourcePolicy } from '@framework/http';",
       '',
       '/**',
       ` * Resource definition declares \`access: authenticated\` for the five CRUD`,
@@ -172,6 +172,7 @@ export function renderPolicy(def: ResourceDefinition): string {
       `  create: (c) => granted(c, ${ability('create')}),`,
       `  update: (c) => granted(c, ${ability('update')}),`,
       `  delete: (c) => granted(c, ${ability('delete')}),`,
+      ...(def.softDelete ? [`  restore: (c) => granted(c, ${ability('restore')}),`] : []),
       '};',
       '',
     ].join('\n');
@@ -190,6 +191,7 @@ export function renderPolicy(def: ResourceDefinition): string {
     '  create: () => true,',
     '  update: () => true,',
     '  delete: () => true,',
+    ...(def.softDelete ? ['  restore: () => true,'] : []),
     '};',
     '',
   ].join('\n');

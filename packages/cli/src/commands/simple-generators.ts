@@ -1,52 +1,8 @@
 import { join } from 'node:path';
-import { flag, type OptionValues } from '../args';
-import { type CommandContext, type CommandResult, defineCommand } from '../command';
-import { usageError } from '../errors';
-import { toKebab, toPascal } from '../generators/naming';
-import { applyChanges, buildChanges, describeChanges, type FileUpdate, type NewFile } from '../generators/plan';
+import { defineCommand } from '../command';
+import type { NewFile } from '../generators/plan';
 import { addImport, insertAfterMarker } from '../generators/registration';
-
-/** Name must be a valid identifier in any of the generated casings. */
-function names(raw: string | undefined, what: string): { readonly pascal: string; readonly kebab: string } {
-  if (!raw || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(raw)) {
-    throw usageError(`${what} name must be a valid identifier (e.g. OrderPaid, welcome-email)`);
-  }
-  const words = raw
-    .replaceAll('_', '-')
-    .split('-')
-    .flatMap((part) => part.split(/(?=[A-Z])/));
-  return { pascal: toPascal(words), kebab: toKebab(words) };
-}
-
-/** camelCase variable from a kebab/pascal name (orderPaid, welcomeEmailJob). */
-const camelVar = (kebab: string, suffix = ''): string =>
-  kebab
-    .split('-')
-    .map((part, index) => (index === 0 ? part.toLowerCase() : part[0]?.toUpperCase() + part.slice(1).toLowerCase()))
-    .join('') + suffix;
-
-/** Shared pipeline: plan → review changes → write (or print with --dry-run). */
-async function generate(
-  context: CommandContext,
-  options: OptionValues,
-  files: readonly NewFile[],
-  updates: readonly FileUpdate[] = [],
-): Promise<CommandResult> {
-  const changes = await buildChanges(context.root, files, updates, flag(options, 'force'));
-  const described = describeChanges(changes);
-  if (flag(options, 'dry-run')) {
-    for (const line of described) context.print(line);
-    return { data: { changes: described, dryRun: true } };
-  }
-  await applyChanges(context.root, changes);
-  for (const line of described) context.print(line);
-  return { data: { changes: described } };
-}
-
-const COMMON_OPTIONS = [
-  { name: 'force', type: 'boolean', description: 'Overwrite generator-owned files' },
-  { name: 'dry-run', type: 'boolean', description: 'Print the planned changes without writing' },
-] as const;
+import { COMMON_OPTIONS, camelVar, generate, names } from './generator-pipeline';
 
 export const simpleGeneratorCommands = [
   defineCommand({

@@ -11,6 +11,7 @@ export type ResourceAbility =
   | 'audit'
   | 'update'
   | 'delete'
+  | 'restore'
   | '*'
   | 'export'
   | 'import'
@@ -31,6 +32,7 @@ export const denyAll: ResourcePolicy = {
   create: () => false,
   update: () => false,
   delete: () => false,
+  restore: () => false,
   '*': () => false,
   export: () => false,
   audit: () => false,
@@ -57,6 +59,7 @@ export const authenticatedPolicy: ResourcePolicy = {
   create: (c) => currentPrincipal(c) !== null,
   update: (c) => currentPrincipal(c) !== null,
   delete: (c) => currentPrincipal(c) !== null,
+  restore: (c) => currentPrincipal(c) !== null,
   '*': (c) => currentPrincipal(c) !== null,
   export: (c) => currentPrincipal(c) !== null,
   audit: (c) => currentPrincipal(c) !== null,

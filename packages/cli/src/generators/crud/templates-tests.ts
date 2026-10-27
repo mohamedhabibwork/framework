@@ -115,6 +115,24 @@ export function renderApiTest(def: ResourceDefinition, files: CrudFiles): string
     ? // biome-ignore lint/suspicious/noTemplateCurlyInString: emits a template literal into generated source
       "\n    expect((await call(`${BASE}/${record.id}`, 'PATCH', { createdAt: '2000-01-01T00:00:00Z' })).status).toBe(422);"
     : '';
+  const softDeleteLifecycle = def.softDelete
+    ? `
+
+    const deletedList = await call(\`\${BASE}/deleted\`);
+    expect(deletedList.status).toBe(200);
+    const deletedPage = (await deletedList.json()) as { items: { id: string | number }[] };
+    expect(deletedPage.items.map((item) => item.id)).toContain(record.id);
+
+    const deletedRead = await call(\`\${BASE}/deleted/\${record.id}\`);
+    expect(deletedRead.status).toBe(200);
+    expect(${camel}ResponseSchema.parse(await deletedRead.json())).toMatchObject({ id: record.id });
+
+    const restored = await call(\`\${BASE}/\${record.id}/restore\`, 'POST');
+    expect(restored.status).toBe(200);
+
+    const restoredRead = await call(\`\${BASE}/\${record.id}\`);
+    expect(restoredRead.status).toBe(200);`
+    : '';
   const authenticated = def.access === 'authenticated';
   const authImports = authenticated ? "import { AUTH_SERVICE } from '@framework/auth';\n" : '';
   const authSetup = authenticated
@@ -239,7 +257,7 @@ describe('${pascal} API (real PostgreSQL)', () => {
 
     const missing = await call(\`\${BASE}/\${record.id}\`);
     expect(missing.status).toBe(404);
-    expect(await errorCode(missing)).toBe('NOT_FOUND');
+    expect(await errorCode(missing)).toBe('NOT_FOUND');${softDeleteLifecycle}
   });
 ${authTests}
   test('responses expose only the public allowlist', async () => {

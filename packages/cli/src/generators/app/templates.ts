@@ -29,6 +29,28 @@ const TSCONFIG_COMPILER_OPTIONS = `{
 }`;
 
 /**
+ * Biome's `organizeImports` order for names inside a single import clause.
+ * Derived empirically against the pinned Biome: a case-insensitive comparison
+ * is primary, an ASCII tiebreak (upper-case sorts first) applies when two
+ * names differ only by case at the first differing character, and the shorter
+ * name wins on a prefix. Used so generated mixed type/value imports land in
+ * the position Biome expects without a post-generation formatter pass.
+ */
+function compareImportNames(a: string, b: string): number {
+  const shared = Math.min(a.length, b.length);
+  for (let i = 0; i < shared; i++) {
+    const left = a.charCodeAt(i);
+    const right = b.charCodeAt(i);
+    if (left === right) continue;
+    const lowerLeft = left >= 65 && left <= 90 ? left + 32 : left;
+    const lowerRight = right >= 65 && right <= 90 ? right + 32 : right;
+    if (lowerLeft !== lowerRight) return lowerLeft - lowerRight;
+    return left - right;
+  }
+  return a.length - b.length;
+}
+
+/**
  * The complete generated application: the same structure as the framework's
  * playground, minus the sample module (added by `make:crud`), plus events,
  * queue worker and audit wiring.
@@ -56,6 +78,8 @@ export function appTemplateFiles(input: AppTemplateInput): readonly NewFile[] {
     { path: 'app/providers/data.tokens.ts', content: dataTokens() },
     { path: 'app/providers/data.provider.ts', content: dataProvider() },
     { path: 'app/jobs/index.ts', content: jobsRegistry() },
+    { path: 'app/listeners/index.ts', content: listenersRegistry() },
+    { path: 'app/listeners/listeners.provider.ts', content: listenersProvider() },
     { path: 'routes/api.ts', content: apiRoutes() },
     { path: 'routes/data.ts', content: dataRoutes() },
     { path: 'routes/health.ts', content: healthRoutes() },
@@ -113,8 +137,13 @@ function packageJson({ name }: AppTemplateInput): string {
 }
 
 function biomeJson(): string {
+  // `"root": false` lets the config compose when the app is generated *inside*
+  // the framework workspace (apps/*) instead of replacing the root config —
+  // without it, `biome check .` at the workspace root fails with a nested-root
+  // configuration error. It is a no-op for a standalone app (no parent config).
   return `{
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "root": false,
   "vcs": { "enabled": false },
   "files": { "includes": ["**", "!**/node_modules", "!**/dist", "!**/database/migrations/meta"] },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 120 },
@@ -288,7 +317,11 @@ export const configSchema = z.object({
           .map((origin) => origin.trim())
           .filter(Boolean),
       ),
-    maxBodyBytes: z.coerce.number().int().min(1).default(1024 * 1024),
+    maxBodyBytes: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(1024 * 1024),
     secureHeaders: booleanString.default(true),
     throttle: z.object({
       enabled: booleanString.default(true),
@@ -408,12 +441,12 @@ export function createApplication(config: AppConfig): ${className}Application {
 
 function bootstrapHttp({ className }: AppTemplateInput): string {
   return `import { auditRoutes } from '@framework/crud';
-import { AUDIT_READER, AuditReader } from '@framework/database';
-import { assertNoDuplicateRoutes, createHttpKernel, forbidden, type FrameworkEnv, resolve } from '@framework/http';
+import { AUDIT_READER } from '@framework/database';
+import { assertNoDuplicateRoutes, createHttpKernel, type FrameworkEnv, forbidden, resolve } from '@framework/http';
 import type { Context } from 'hono';
+import { WEBSOCKET_GATEWAY } from '../app/providers/events.provider';
 import { apiRoutes } from '../routes/api';
 import { healthRoutes } from '../routes/health';
-import { WEBSOCKET_GATEWAY } from '../app/providers/events.provider';
 import type { ${className}Application } from './app';
 import { createMiddleware } from './middleware';
 
@@ -443,16 +476,13 @@ export function createHttp(application: ${className}Application) {
     .route(
       '/audit',
       auditRoutes({
-        authorize: (c: Context<FrameworkEnv>) => {
+        authorize: (_c: Context<FrameworkEnv>) => {
           if (config.app.env === 'production') throw forbidden('Audit endpoints require authorization');
         },
         reader: (c: Context<FrameworkEnv>) => resolve(c, AUDIT_READER),
       }),
     )
-    .route(
-      '/ws',
-      application.container.resolve(WEBSOCKET_GATEWAY).routes(),
-    );
+    .route('/ws', application.container.resolve(WEBSOCKET_GATEWAY).routes());
 
   assertNoDuplicateRoutes(http);
   return http;
@@ -481,18 +511,21 @@ import type { AppConfig } from '../config';
  * default; test suites disable it via \`HTTP_THROTTLE_ENABLED=false\`).
  */
 export function createMiddleware(config: AppConfig): MiddlewareRegistry {
-  return new MiddlewareRegistry()
-    .alias(
-      'throttle',
-      throttle({
-        limiter: (c) => resolve(c, RATE_LIMITER),
-        enabled: config.http.throttle.enabled,
-        limit: config.http.throttle.limit,
-        windowSeconds: config.http.throttle.windowSeconds,
-        prefix: 'http.api',
-      }),
-    )
-    .group('api', ['throttle']);
+  return (
+    new MiddlewareRegistry()
+      .alias(
+        'throttle',
+        throttle({
+          limiter: (c) => resolve(c, RATE_LIMITER),
+          enabled: config.http.throttle.enabled,
+          limit: config.http.throttle.limit,
+          windowSeconds: config.http.throttle.windowSeconds,
+          prefix: 'http.api',
+        }),
+      )
+      // @framework:middleware
+      .group('api', ['throttle'])
+  );
 }
 `;
 }
@@ -521,6 +554,7 @@ export function buildOpenApiDocument(version = '1.0.0') {
 
 function bootstrapProviders(): string {
   return `import type { ServiceProvider } from '@framework/core';
+import { listenersProvider } from '../app/listeners/listeners.provider';
 import { cacheProvider } from '../app/providers/cache.provider';
 import { dataProvider } from '../app/providers/data.provider';
 import { databaseProvider } from '../app/providers/database.provider';
@@ -541,6 +575,7 @@ export const providers: readonly ServiceProvider<AppConfig>[] = [
   storageProvider,
   databaseProvider,
   eventsProvider,
+  listenersProvider,
   dataProvider,
   // @framework:providers
 ];
@@ -647,8 +682,8 @@ export const DATA_PORTER = token<DataPorter>('data.porter');
 }
 
 function dataProvider(): string {
-  return `import { DataPorter, LocalExportStore } from '@framework/crud';
-import { defineProvider } from '@framework/core';
+  return `import { defineProvider } from '@framework/core';
+import { DataPorter, LocalExportStore } from '@framework/crud';
 import { QUEUE, QueueManager } from '@framework/queue';
 import type { AppConfig } from '../../config';
 import { DATA_PORTER, EXPORT_STORE } from './data.tokens';
@@ -690,10 +725,9 @@ export const dataProvider = defineProvider<AppConfig>({
 }
 
 function eventsProvider(): string {
-  return `import { defineProvider, token } from '@framework/core';
+  return `import { defineProvider, EXECUTION_CONTEXT, token } from '@framework/core';
 import { EVENT_BUS, MemoryEventBus, RedisEventBus, WebsocketGateway } from '@framework/events';
 import { resolve } from '@framework/http';
-import { EXECUTION_CONTEXT } from '@framework/core';
 import type { AppConfig } from '../../config';
 
 export const WEBSOCKET_GATEWAY = token<WebsocketGateway>('events.websocket-gateway');
@@ -742,6 +776,48 @@ export const jobs: JobList = [];
 `;
 }
 
+function listenersRegistry(): string {
+  return `import type { DomainEvent } from '@framework/events';
+
+/**
+ * A listener reacts to one event channel. The listeners provider subscribes
+ * every entry below the marker when the application boots. Delivery is
+ * at-least-once: keep handlers idempotent. Add listeners with \`make:listener\`.
+ */
+export interface Listener {
+  readonly name: string;
+  readonly channel: string;
+  readonly handle: (event: DomainEvent) => void | Promise<void>;
+}
+
+export const listeners: Listener[] = [
+  // @framework:listeners
+];
+`;
+}
+
+function listenersProvider(): string {
+  return `import { defineProvider } from '@framework/core';
+import { EVENT_BUS } from '@framework/events';
+import type { AppConfig } from '../../config';
+import { listeners } from './index';
+
+/**
+ * Subscribes every registered listener to the event bus at boot. Handlers
+ * release with the bus itself, which the events provider closes.
+ */
+export const listenersProvider = defineProvider<AppConfig>({
+  name: 'listeners',
+  dependsOn: ['events'],
+  register() {},
+  async boot({ container }) {
+    const bus = container.resolve(EVENT_BUS);
+    for (const listener of listeners) await bus.subscribe(listener.channel, listener.handle);
+  },
+});
+`;
+}
+
 function apiRoutes(): string {
   return `import type { FrameworkEnv } from '@framework/http';
 import { Hono } from 'hono';
@@ -755,11 +831,11 @@ export const apiRoutes = new Hono<FrameworkEnv>()
 }
 
 function dataRoutes(): string {
-  return `import { importExportRoutes } from '@framework/crud';
-import { EXECUTION_CONTEXT } from '@framework/core';
+  return `import { EXECUTION_CONTEXT } from '@framework/core';
+import { importExportRoutes } from '@framework/crud';
 import { forbidden, resolve } from '@framework/http';
-import { loadAppConfig } from '../config';
 import { DATA_PORTER } from '../app/providers/data.tokens';
+import { loadAppConfig } from '../config';
 
 // Loaded once; the authorization guard reads the validated env from it.
 const configPromise = loadAppConfig();
@@ -884,9 +960,9 @@ installGracefulShutdown({
 function worker(): string {
   return `import { installGracefulShutdown } from '@framework/core';
 import { JobWorker, QueueManager } from '@framework/queue';
+import { jobs } from '../app/jobs';
 import { createApplication } from '../bootstrap/app';
 import { loadAppConfig } from '../config';
-import { jobs } from '../app/jobs';
 
 const config = await loadAppConfig();
 const application = await createApplication(config).boot();
@@ -915,7 +991,7 @@ function cli({ name }: AppTemplateInput): string {
 import { join } from 'node:path';
 import { MemoryCache, RedisCache } from '@framework/cache';
 import { defineProject, frameworkCommands, runCli } from '@framework/cli';
-import { type DatabaseConnection, createConnection } from '@framework/database';
+import { createConnection, type DatabaseConnection } from '@framework/database';
 import { listRoutes } from '@framework/http';
 import { createApplication } from '../bootstrap/app';
 import { createHttp } from '../bootstrap/http';
@@ -963,7 +1039,9 @@ const openSessionStore = authInstalled
   ? async (rawConfig: unknown) => {
       const config = rawConfig as AppConfig;
       const auth = (await import(AUTH_SPECIFIER)) as {
-        PgSessionStore: new (connection: DatabaseConnection) => {
+        PgSessionStore: new (
+          connection: DatabaseConnection,
+        ) => {
           countExpired(now?: Date): Promise<number>;
           prune(now?: Date): Promise<number>;
         };
@@ -982,8 +1060,12 @@ const openSessionStore = authInstalled
     }
   : undefined;
 
-/** Application-local CLI: the project root comes from this file, never from the shell's cwd. */
-const project = defineProject({
+/**
+ * Application-local CLI: the project root comes from this file, never from the
+ * shell's cwd. Exported for embedders (e.g. the MCP server) that invoke
+ * commands in-process.
+ */
+export const project = defineProject({
   name: '${name}',
   root,
   frameworkVersion: '0.1.0',
@@ -996,6 +1078,7 @@ const project = defineProject({
     migrations: 'database/migrations',
     apiRoutes: 'routes/api.ts',
     providers: 'bootstrap/providers.ts',
+    middleware: 'bootstrap/middleware.ts',
     openapi: 'bootstrap/openapi.ts',
     config: 'config/index.ts',
     testSupport: 'tests/support.ts',
@@ -1035,16 +1118,26 @@ const project = defineProject({
   openapi: () => ({ operations, build: buildOpenApiDocument }),
 });
 
-process.exitCode = await runCli({
-  argv: process.argv.slice(2),
-  project,
-  commands: frameworkCommands,
-  cliVersion: '0.1.0',
-});
+if (import.meta.main) {
+  process.exitCode = await runCli({
+    argv: process.argv.slice(2),
+    project,
+    commands: frameworkCommands,
+    cliVersion: '0.1.0',
+  });
+}
 `;
 }
 
 function testSupport({ className }: AppTemplateInput): string {
+  // The type name is app-specific, so its Biome-sorted position relative to
+  // `createApplication` varies per app; compute it instead of hard-coding one
+  // order (which is wrong for roughly half of all names).
+  const applicationType = `${className}Application`;
+  const applicationImport =
+    compareImportNames(applicationType, 'createApplication') < 0
+      ? `import { type ${applicationType}, createApplication } from '../bootstrap/app';`
+      : `import { createApplication, type ${applicationType} } from '../bootstrap/app';`;
   return `import { join } from 'node:path';
 import { parseConfig } from '@framework/core';
 import {
@@ -1053,7 +1146,7 @@ import {
   requireTestDatabaseUrl,
   serveOnEphemeralPort,
 } from '@framework/testing';
-import { createApplication, type ${className}Application } from '../bootstrap/app';
+${applicationImport}
 import { createHttp } from '../bootstrap/http';
 import { configSchema, mapEnvironment } from '../config';
 

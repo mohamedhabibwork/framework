@@ -4,6 +4,26 @@ import { dirname } from 'node:path';
 import { failure, usageError } from '../errors';
 import { resolveInsideProject } from './paths';
 
+export interface Prerequisite {
+  /** Project-relative file that must exist. */
+  readonly path: string;
+  /** The command that creates it, shown in the error. */
+  readonly command: string;
+}
+
+/** Fails with one actionable list when referenced artifacts are missing. */
+export async function assertPrerequisites(root: string, required: readonly Prerequisite[]): Promise<void> {
+  const missing: string[] = [];
+  for (const entry of required) {
+    if (!(await Bun.file(resolveInsideProject(root, entry.path)).exists())) {
+      missing.push(`${entry.path} (run ${entry.command})`);
+    }
+  }
+  if (missing.length > 0) {
+    throw usageError(`Missing referenced files: ${missing.join(', ')}`);
+  }
+}
+
 export type ChangeAction = 'create' | 'update' | 'overwrite';
 
 export interface FileChange {

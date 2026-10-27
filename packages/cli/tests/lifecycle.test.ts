@@ -48,7 +48,7 @@ beforeAll(async () => {
   app = join(SCRATCH, `lifecycle-${randomBytes(4).toString('hex')}`);
   const copy = Bun.spawn(['cp', '-R', STARTER, app], { cwd: WORKSPACE, stdout: 'pipe', stderr: 'pipe' });
   expect(await copy.exited).toBe(0);
-});
+}, 300_000);
 
 afterAll(async () => {
   if (app !== SCRATCH) await rm(app, { recursive: true, force: true });

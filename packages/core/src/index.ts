@@ -2,6 +2,7 @@
 // Convention: every interface/type lives in `./types`, every constant in
 // `./constants`; runtime values (classes, functions) stay in their modules.
 export { Application } from './application';
+export { codesForStatus, ERROR_CATALOG, ERROR_CODES, ERROR_STATUSES } from './catalog';
 export { mergeEnv, parseEnvFile, readEnvFile } from './config/env';
 export { deepFreeze, loadConfig, parseConfig } from './config/load';
 export { isSecretKey, REDACTED, redact, redactUrl } from './config/redact';
@@ -30,6 +31,8 @@ export type {
   ApplicationState,
   BindingOptions,
   DeepReadonly,
+  ErrorCode,
+  ErrorStatus,
   GracefulShutdownOptions,
   JsonObject,
   JsonPrimitive,

@@ -74,8 +74,7 @@ export interface EnqueueOptions {
 
 const STATES: readonly JobState[] = ['waiting', 'active', 'completed', 'failed', 'delayed', 'paused'];
 
-async function toStatus(job: Job<JobEnvelope, JsonValue>): Promise<JobStatus | null> {
-  const state = await job.getState();
+async function toStatus(job: Job<JobEnvelope, JsonValue>, state: string): Promise<JobStatus | null> {
   const known =
     STATES.find((s) => s === state) ?? (state === 'prioritized' || state === 'waiting-children' ? 'waiting' : null);
   if (!known || !job.id) return null;
@@ -155,12 +154,26 @@ export class QueueKitAdapter {
 
   async status(id: string): Promise<JobStatus | null> {
     const job = await this.queue.getJob(id);
-    return job ? toStatus(job) : null;
+    if (!job) return null;
+    const state = await job.getState();
+    // The job hash (`getJob`) and its list membership (`getState`) are read in
+    // two round trips, so a job that transitions between them would otherwise
+    // be reported as terminal while the fields written by that same transition
+    // (`failedReason`, `finishedOn`, `attemptsMade`, `returnvalue`) are still
+    // stale. Once a terminal state is observed, re-read the hash so the
+    // snapshot is consistent, and always report the state we branched on —
+    // never a later re-read — so state and fields can never disagree.
+    if (state === 'completed' || state === 'failed') {
+      return toStatus((await this.queue.getJob(id)) ?? job, state);
+    }
+    return toStatus(job, state);
   }
 
   async failed(limit: number, offset: number): Promise<JobStatus[]> {
     const jobs = await this.queue.getFailed(offset, offset + limit - 1);
-    return (await Promise.all(jobs.map(toStatus))).filter((s): s is JobStatus => s !== null);
+    // `getFailed` only returns jobs in the failed set, so their state is known
+    // without a per-job round trip.
+    return (await Promise.all(jobs.map((job) => toStatus(job, 'failed')))).filter((s): s is JobStatus => s !== null);
   }
 
   /** Re-queues a failed job; payload (and thus idempotency) is unchanged. */

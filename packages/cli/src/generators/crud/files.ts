@@ -23,7 +23,7 @@ export interface CrudFiles {
   readonly testSupport: string;
 }
 
-export function crudFiles(def: ResourceDefinition, paths: ProjectPaths): CrudFiles {
+export function crudFiles(def: Pick<ResourceDefinition, 'names'>, paths: ProjectPaths): CrudFiles {
   const { kebab, pluralKebab, module } = def.names;
   const dir = `${paths.modules}/${module}`;
   return {

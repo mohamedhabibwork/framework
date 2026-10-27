@@ -6,6 +6,7 @@ import { defineSchedule } from '@framework/scheduler';
  * executed by the regular workers.
  */
 export const schedules = [
+  // @framework:schedules
   defineSchedule({
     name: 'orders-nightly-summary',
     cron: '0 3 * * *',

@@ -56,5 +56,5 @@ jobs:
         run: bun run typecheck
       - name: Lint
         run: bun run lint
-      - name: Test (real PostgreSQL + Redis)
-        run: bun run test
+      - name: Test + coverage gate (real PostgreSQL + Redis)
+        run: bun run coverage

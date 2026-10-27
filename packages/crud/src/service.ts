@@ -154,15 +154,52 @@ export class ResourceService<
     return { ...values, [owner.field]: id } as TValues;
   }
 
-  list(request: PageRequest, query: QueryOptions = {}): Promise<Page<TEntity>> {
-    return this.repository.paginate(request, {
+  async list(request: PageRequest, query: QueryOptions = {}): Promise<Page<TEntity>> {
+    const page = await this.repository.paginate(request, {
       ...query,
       filters: [...this.#scopeFilters(), ...(query.filters ?? [])],
     });
+    return {
+      items: page.items,
+      meta: {
+        page: page.meta.page,
+        limit: page.meta.limit,
+        total: page.meta.total,
+        totalPages: page.meta.totalPages ?? Math.ceil(page.meta.total / (page.meta.limit || 1)),
+      },
+    };
+  }
+
+  async listDeleted(request: PageRequest, query: QueryOptions = {}): Promise<Page<TEntity>> {
+    if (!this.repository.paginateDeleted) {
+      throw badRequest('This resource does not support soft-delete');
+    }
+    const page = await this.repository.paginateDeleted(request, {
+      ...query,
+      filters: [...this.#scopeFilters(), ...(query.filters ?? [])],
+    });
+    return {
+      items: page.items,
+      meta: {
+        page: page.meta.page,
+        limit: page.meta.limit,
+        total: page.meta.total,
+        totalPages: page.meta.totalPages ?? Math.ceil(page.meta.total / (page.meta.limit || 1)),
+      },
+    };
   }
 
   async get(id: TEntity['id']): Promise<TEntity> {
     const entity = await this.repository.findById(id);
+    if (!entity) this.#missing(id);
+    return this.#assertOwned(entity);
+  }
+
+  async getDeleted(id: TEntity['id']): Promise<TEntity> {
+    if (!this.repository.findDeletedById) {
+      throw badRequest('This resource does not support soft-delete');
+    }
+    const entity = await this.repository.findDeletedById(id);
     if (!entity) this.#missing(id);
     return this.#assertOwned(entity);
   }
@@ -196,15 +233,17 @@ export class ResourceService<
 
   async restore(id: TEntity['id']): Promise<TEntity> {
     if (!this.repository.restore) throw badRequest('This resource does not support restore');
-    // No ownership pre-check here: the row is soft-deleted, so the visible
-    // read (`get`) cannot see it yet. Repositories that must scope restores
-    // override `scopeConditions()` — the SQL-level seam.
-    await this.beforeRestore(id);
-    if (!(await this.repository.restore(id))) this.#missing(id);
-    const entity = await this.get(id);
-    await this.afterRestore(entity);
-    await this.#publish('restored', entity);
-    return entity;
+    if (this.repository.findDeletedById) {
+      await this.getDeleted(id);
+    }
+    return this.transaction(async () => {
+      await this.beforeRestore(id);
+      if (!this.repository.restore || !(await this.repository.restore(id))) this.#missing(id);
+      const entity = await this.get(id);
+      await this.afterRestore(entity);
+      await this.#publish('restored', entity);
+      return entity;
+    });
   }
 
   /** Bulk insert used by the import pipeline; publishes one event per row. */
@@ -246,8 +285,8 @@ export class ResourceService<
 
   protected afterImport(_entities: readonly TEntity[]): Promise<void> | void {}
 
-  #missing(id: EntityId): never {
-    throw this.options.missing ? this.options.missing(id) : notFound(`Resource ${String(id)} not found`);
+  #missing(id: unknown): never {
+    throw this.options.missing ? this.options.missing(id as EntityId) : notFound(`Resource ${String(id)} not found`);
   }
 
   async #publish(verb: string, entity: TEntity): Promise<void> {

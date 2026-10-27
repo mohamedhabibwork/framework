@@ -111,6 +111,8 @@ export interface ResourceOperationsInput {
   readonly security?: 'public' | readonly string[];
   /** Override the OpenAPI tag (default: the English plural of `resource`). */
   readonly tag?: string;
+  /** Whether to document soft-delete endpoints (/deleted, /deleted/:id, /:id/restore). */
+  readonly softDelete?: boolean;
 }
 
 /** Minimal English pluralization for tags ('Product' -> 'Products', 'Category' -> 'Categories'). */
@@ -131,14 +133,14 @@ const camelOf = (pascal: string): string => pascal.charAt(0).toLowerCase() + pas
  * `OperationSpec` list with `defineOperations` for those.
  */
 export function resourceOperations(input: ResourceOperationsInput): Operation[] {
-  const { mount, resource, schemas } = input;
+  const { mount, resource, schemas, softDelete } = input;
   const security = input.security ?? 'public';
   const tag = input.tag ?? pluralizeResource(resource);
   const camel = camelOf(resource);
   const plural = camelOf(tag);
   const spec = (operation: Omit<Operation, 'fullPath' | 'tag'>): Omit<Operation, 'fullPath' | 'tag'> => operation;
 
-  return defineOperations(mount, tag, [
+  const operations: Omit<Operation, 'fullPath' | 'tag'>[] = [
     spec({
       method: 'get',
       path: '/',
@@ -159,6 +161,34 @@ export function resourceOperations(input: ResourceOperationsInput): Operation[] 
       responses: { 201: { description: `The created ${camel}`, schema: schemas.response } },
       errors: [400, 409, 422],
     }),
+  ];
+
+  if (softDelete) {
+    operations.push(
+      spec({
+        method: 'get',
+        path: '/deleted',
+        operationId: `listDeleted${tag}`,
+        summary: `List soft-deleted ${plural}`,
+        security,
+        ...(schemas.query ? { request: { query: schemas.query } } : {}),
+        responses: { 200: { description: `A page of soft-deleted ${plural}`, schema: pageSchema(schemas.response) } },
+        errors: [400, 422],
+      }),
+      spec({
+        method: 'get',
+        path: '/deleted/:id',
+        operationId: `showDeleted${resource}`,
+        summary: `Show a soft-deleted ${camel}`,
+        security,
+        ...(schemas.param ? { request: { params: schemas.param } } : {}),
+        responses: { 200: { description: `The soft-deleted ${camel}`, schema: schemas.response } },
+        errors: [400, 404, 422],
+      }),
+    );
+  }
+
+  operations.push(
     spec({
       method: 'get',
       path: '/:id',
@@ -192,5 +222,22 @@ export function resourceOperations(input: ResourceOperationsInput): Operation[] 
       responses: { 204: { description: 'Deleted' } },
       errors: [404, 422],
     }),
-  ]);
+  );
+
+  if (softDelete) {
+    operations.push(
+      spec({
+        method: 'post',
+        path: '/:id/restore',
+        operationId: `restore${resource}`,
+        summary: `Restore a soft-deleted ${camel}`,
+        security,
+        ...(schemas.param ? { request: { params: schemas.param } } : {}),
+        responses: { 200: { description: `The restored ${camel}`, schema: schemas.response } },
+        errors: [400, 404, 422],
+      }),
+    );
+  }
+
+  return defineOperations(mount, tag, operations);
 }

@@ -192,8 +192,9 @@ describe('CLI process contract', () => {
     expect((await cli(['make:crud'])).code).toBe(EXIT.USAGE);
     expect((await cli(['nope'])).code).toBe(EXIT.USAGE);
     // queue:failed moved from planned to implemented (real Redis); a command
-    // that is still planned keeps the exit-3 contract.
-    const planned = await cli(['--json', 'make:policy']);
+    // that is still planned keeps the exit-3 contract (make:policy is now a
+    // scaffold generator; make:guard is built; make:model remains planned).
+    const planned = await cli(['--json', 'make:model']);
     expect(planned.code).toBe(EXIT.UNSUPPORTED);
     expect(JSON.parse(planned.stdout)).toMatchObject({ status: 'error', error: { code: 'UNSUPPORTED_CAPABILITY' } });
     // The playground registers the auth module, so authenticated access is a
@@ -324,6 +325,7 @@ describe('infrastructure command execution (in process)', () => {
       migrations: 'database/migrations',
       apiRoutes: 'routes/api.ts',
       providers: 'providers.ts',
+      middleware: 'middleware.ts',
       openapi: 'bootstrap/openapi.ts',
       config: 'config/index.ts',
       testSupport: 'tests/support.ts',

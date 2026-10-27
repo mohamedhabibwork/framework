@@ -48,7 +48,7 @@ export function renderAuthRoutes(files: AuthFiles, configFile: string): string {
     "export const authRoutes = (config: Pick<AppConfig, 'auth' | 'http'>) =>",
     '  defineAuthRoutes({',
     '    service: AUTH_SERVICE,',
-    '    session: config.auth.session as Pick<AuthConfig["session"], "cookie" | "ttlSeconds" | "secure">,',
+    "    session: config.auth.session as Pick<AuthConfig['session'], 'cookie' | 'ttlSeconds' | 'secure'>,",
     '    csrf: csrf({ origin: [...config.http.corsOrigins] }),',
     '  });',
     '',

@@ -17,15 +17,23 @@ export class ResourceController<
 > {
   constructor(
     protected readonly service: ResourceService<TEntity, TCreate, TUpdate>,
-    private readonly serialize: (entity: TEntity) => TResponse,
+    private readonly serialize: (entity: TEntity) => TResponse = (entity) => entity as unknown as TResponse,
   ) {}
 
   list(request: PageRequest, query: QueryOptions = {}): Promise<PageResponse<TResponse>> {
     return this.service.list(request, query).then((page: Page<TEntity>) => mapPage(page, this.serialize));
   }
 
+  deleted(request: PageRequest, query: QueryOptions = {}): Promise<PageResponse<TResponse>> {
+    return this.service.listDeleted(request, query).then((page: Page<TEntity>) => mapPage(page, this.serialize));
+  }
+
   async show(id: TEntity['id']): Promise<TResponse> {
     return this.serialize(await this.service.get(id));
+  }
+
+  showDeleted(id: TEntity['id']): Promise<TResponse> {
+    return this.service.getDeleted(id).then((entity: TEntity) => this.serialize(entity));
   }
 
   async store(input: TCreate): Promise<TResponse> {

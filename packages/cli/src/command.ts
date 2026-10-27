@@ -1,3 +1,4 @@
+import type { PromptSession } from '@framework/prompts';
 import type { OptionSpec, OptionValues } from './args';
 import type { ProjectAdapter } from './project';
 import type { CommandRegistry } from './registry';
@@ -12,7 +13,14 @@ export type CommandGroup =
   | 'cache'
   | 'storage'
   | 'openapi'
-  | 'tooling';
+  | 'tooling'
+  // Application-defined commands (make:command).
+  | 'app'
+  // First-party package equivalents (E-series): Passport, Scout, Telescope, Socialite.
+  | 'oauth'
+  | 'search'
+  | 'observatory'
+  | 'socialite';
 
 /** Release classification required by the specification. */
 export type CommandStatus = 'planned' | 'implemented' | 'validated';
@@ -38,6 +46,13 @@ export interface CommandContext {
   log(line: string): void;
   /** Returns null when prompting is not possible (non-interactive). */
   prompt(question: string): Promise<string | null>;
+  /**
+   * Structured prompt session (`@framework/prompts`). Present whenever the CLI
+   * can resolve answers (interactive TTY, or an injected `--answers` map);
+   * `undefined` in the most minimal non-interactive contexts, where commands
+   * must fall back to `prompt`/defaults.
+   */
+  readonly prompts?: PromptSession;
 }
 
 export interface CommandInput {

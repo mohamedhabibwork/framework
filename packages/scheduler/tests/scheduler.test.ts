@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { Application } from '@framework/core';
+import { Application, ExecutionContext } from '@framework/core';
 import { defineJob, JobWorker, QueueManager } from '@framework/queue';
 import { z } from 'zod/v4';
 import { defineSchedule } from '../src/definition';
 import { Scheduler } from '../src/scheduler';
+import { scheduleFirePayloadSchema } from '../src/types';
 
 const redisUrl = process.env.REDIS_URL;
 if (!redisUrl) throw new Error('REDIS_URL is not set; run `bun run db:up`');
@@ -117,5 +118,55 @@ describe('Scheduler (BullMQ job schedulers on real Redis)', () => {
     await scheduler.desync('nightly-workflow');
     const ids = (await scheduler.descriptors()).map((d) => d.id);
     expect(ids).not.toContain('schedule:nightly-workflow');
+  });
+});
+
+describe('Scheduler primitives (deterministic)', () => {
+  test('fire payloads are bounded non-empty names', () => {
+    expect(scheduleFirePayloadSchema.safeParse({ schedule: '' }).success).toBe(false);
+    expect(scheduleFirePayloadSchema.safeParse({ schedule: 'x'.repeat(121) }).success).toBe(false);
+    expect(scheduleFirePayloadSchema.safeParse({ schedule: 'every-minute' }).success).toBe(true);
+  });
+
+  test('secondsUntilNextRun falls back to 60 for unknown timetables', async () => {
+    expect(await scheduler.secondsUntilNextRun('ghost')).toBe(60);
+  });
+
+  test('skip locks clamp their TTL to one hour', async () => {
+    const name = `ttl-${crypto.randomUUID().slice(0, 8)}`;
+    expect(await scheduler.acquire(name, 'skip', 10_000)).toBe(true);
+    const ttl = await queue.redis.ttl(`schedule:lock:${name}`);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(3_600);
+    await scheduler.release(name);
+  });
+
+  test('replace overlap never touches Redis', async () => {
+    const name = `replace-${crypto.randomUUID().slice(0, 8)}`;
+    expect(await scheduler.acquire(name, 'replace', 60)).toBe(true);
+    expect(await scheduler.acquire(name, 'replace', 60)).toBe(true);
+    expect(await queue.redis.exists(`schedule:lock:${name}`)).toBe(0);
+  });
+
+  test('the fire job rejects unregistered schedules by code', async () => {
+    const fire = scheduler.fireJob([everyMinute]);
+    const context = {
+      jobId: 'direct-invocation',
+      attempt: 1,
+      scope: null,
+      execution: new ExecutionContext('job', 'corr-direct'),
+      signal: new AbortController().signal,
+      progress: async () => undefined,
+    } as unknown as never;
+    try {
+      await (fire.handle as (payload: { schedule: string }, context: never) => Promise<unknown>)(
+        { schedule: 'missing-schedule' },
+        context,
+      );
+      throw new Error('expected a throw');
+    } catch (error) {
+      expect((error as { code?: string }).code).toBe('SCHEDULE_UNKNOWN');
+      expect((error as Error).message).toContain('missing-schedule');
+    }
   });
 });

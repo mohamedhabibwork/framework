@@ -76,3 +76,81 @@ describe('resourceOperations', () => {
     expect(secured.every((operation) => operation.tag === 'Orders')).toBe(true);
   });
 });
+
+describe('resourceOperations with softDelete', () => {
+  const operations = resourceOperations({
+    mount: '/api/v1/products',
+    resource: 'Product',
+    schemas,
+    softDelete: true,
+  });
+  const op = (id: string): Operation => {
+    const found = operations.find((operation) => operation.operationId === id);
+    expect(found).toBeDefined();
+    return found as Operation;
+  };
+  const listDeleted = op('listDeletedProducts');
+  const showDeleted = op('showDeletedProduct');
+  const restore = op('restoreProduct');
+
+  test('derives the eight controller endpoints in route-priority order', () => {
+    expect(operations.map((operation) => `${operation.method.toUpperCase()} ${operation.fullPath}`)).toEqual([
+      'GET /api/v1/products',
+      'POST /api/v1/products',
+      'GET /api/v1/products/deleted',
+      'GET /api/v1/products/deleted/:id',
+      'GET /api/v1/products/:id',
+      'PATCH /api/v1/products/:id',
+      'DELETE /api/v1/products/:id',
+      'POST /api/v1/products/:id/restore',
+    ]);
+    expect(operations.map((operation) => operation.operationId)).toEqual([
+      'listProducts',
+      'createProduct',
+      'listDeletedProducts',
+      'showDeletedProduct',
+      'showProduct',
+      'updateProduct',
+      'deleteProduct',
+      'restoreProduct',
+    ]);
+  });
+
+  test('documents requests, responses, summaries, and error statuses for soft-delete operations', () => {
+    expect(listDeleted.summary).toBe('List soft-deleted products');
+    expect(listDeleted.request?.query).toBe(schemas.query);
+    expect(listDeleted.responses[200]?.schema).toBeDefined();
+    expect(listDeleted.responses[200]?.description).toBe('A page of soft-deleted products');
+    expect(listDeleted.errors).toEqual([400, 422]);
+
+    expect(showDeleted.summary).toBe('Show a soft-deleted product');
+    expect(showDeleted.request?.params).toBe(schemas.param);
+    expect(showDeleted.responses[200]?.schema).toBe(schemas.response);
+    expect(showDeleted.responses[200]?.description).toBe('The soft-deleted product');
+    expect(showDeleted.errors).toEqual([400, 404, 422]);
+
+    expect(restore.summary).toBe('Restore a soft-deleted product');
+    expect(restore.request?.params).toBe(schemas.param);
+    expect(restore.responses[200]?.schema).toBe(schemas.response);
+    expect(restore.responses[200]?.description).toBe('The restored product');
+    expect(restore.errors).toEqual([400, 404, 422]);
+  });
+
+  test('security scheme flows through to soft-delete operations', () => {
+    const secured = resourceOperations({
+      mount: '/api/v1/orders',
+      resource: 'Order',
+      security: ['bearerAuth'],
+      schemas,
+      softDelete: true,
+    });
+    expect(
+      secured.every((operation) => operation.security !== 'public' && operation.security.includes('bearerAuth')),
+    ).toBe(true);
+    expect(secured.find((operation) => operation.operationId === 'restoreOrder')?.security).toEqual(['bearerAuth']);
+    expect(secured.find((operation) => operation.operationId === 'listDeletedOrders')?.security).toEqual([
+      'bearerAuth',
+    ]);
+    expect(secured.find((operation) => operation.operationId === 'showDeletedOrder')?.security).toEqual(['bearerAuth']);
+  });
+});
