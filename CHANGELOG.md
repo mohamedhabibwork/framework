@@ -9,6 +9,15 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ## [Unreleased]
 
+### Changed
+
+- The documentation site deploys on Dokploy instead of Cloudflare Workers:
+  `apps/docs/Dockerfile` builds the static Starlight output with Bun and
+  serves it from nginx (immutable `/_astro` caching, security headers,
+  `/404.html`); Dokploy rebuilds it on every push to `main`. The Cloudflare
+  adapter, `wrangler.jsonc`, the `docs:deploy` script and the wrangler CI
+  deploy job are removed — CI now builds the image instead.
+
 ## [0.2.0] — 2026-10-27
 
 ### Tests

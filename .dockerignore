@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/coverage
+**/.astro
+.git
+.tmp
+.env
+.env.*
+!.env.example
+.workbuddy-ai
+apps/*/storage

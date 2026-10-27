@@ -2,7 +2,6 @@
   "name": "docs",
   "version": "0.0.1",
   "dependencies": {
-    "@astrojs/cloudflare": "^14.3.4",
     "@astrojs/mdx": "^8.0.3",
     "@astrojs/starlight": "^0.42.5",
     "astro": "^7.3.7",
@@ -14,11 +13,7 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "deploy": "astro build && wrangler deploy",
     "astro": "astro"
   },
-  "type": "module",
-  "devDependencies": {
-    "wrangler": "^4.148.0"
-  }
+  "type": "module"
 }
