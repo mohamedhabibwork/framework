@@ -13,7 +13,7 @@
     "@framework/http": "workspace:*",
     "@framework/queue": "workspace:*",
     "@framework/validation": "workspace:*",
-    "bullmq": "6.4.1",
+    "bullmq": "6.4.2",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.13",
     "zod": "4.6.7"
