@@ -16,13 +16,13 @@
 
 Each equivalent is a **new workspace package** under `packages/*` (auto-included by the root `tsconfig.json` `include: ["packages/*/src", "packages/*/tests", …]` and the root `package.json` `workspaces: ["packages/*","apps/*"]`). Names follow the framework's subsystem-per-package convention; the Laravel name is documented for discoverability (the mapping doc is `docs/architecture/laravel-concept-map.md`).
 
-| Laravel package | Framework package | One-line scope | Depends on (framework) | New runtime deps |
-|---|---|---|---|---|
-| **Passport** | `@framework/oauth-server` | OAuth2 authorization server (clients, grants, scopes, tokens, introspection) | `auth`, `database`, `http`, `core`, `cache` | **none** |
-| **Prompts** | `@framework/prompts` | Interactive CLI prompts (text/confirm/select/multiselect/password/spinner) | `core` (types only) | **none** |
-| **Scout** | `@framework/search` | Driver-based search/indexing (memory + Postgres, pluggable backends) | `database`, `events`, `queue`, `core` | **none** |
-| **Socialite** | `@framework/socialite` | OAuth social login (Google, GitHub) + account linking | `auth`, `http`, `cache`, `core` | **none** |
-| **Telescope** | `@framework/observatory` | Dev observability/debug dashboard (request/query/job/event/exception/mail/cache watchers) | `http`, `events`, `database`, `logging`, `core` | **none** |
+| Laravel package | Framework package         | One-line scope                                                                            | Depends on (framework)                          | New runtime deps |
+| --------------- | ------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------- |
+| **Passport**    | `@framework/oauth-server` | OAuth2 authorization server (clients, grants, scopes, tokens, introspection)              | `auth`, `database`, `http`, `core`, `cache`     | **none**         |
+| **Prompts**     | `@framework/prompts`      | Interactive CLI prompts (text/confirm/select/multiselect/password/spinner)                | `core` (types only)                             | **none**         |
+| **Scout**       | `@framework/search`       | Driver-based search/indexing (memory + Postgres, pluggable backends)                      | `database`, `events`, `queue`, `core`           | **none**         |
+| **Socialite**   | `@framework/socialite`    | OAuth social login (Google, GitHub) + account linking                                     | `auth`, `http`, `cache`, `core`                 | **none**         |
+| **Telescope**   | `@framework/observatory`  | Dev observability/debug dashboard (request/query/job/event/exception/mail/cache watchers) | `http`, `events`, `database`, `logging`, `core` | **none**         |
 
 > **Naming rationale.** `@framework/prompts` and `@framework/socialite` keep the Laravel names (generic enough). `Passport` → `oauth-server` and `Scout` → `search` use descriptive names to avoid trademark/tool ambiguity. `Telescope` → `observatory` is deliberate: it keeps the package clearly **distinct from the planned OpenTelemetry work** (M7 tracing/metrics) — a name like `telemetry` would collide conceptually (see ADR-20).
 
@@ -32,19 +32,20 @@ Each equivalent is a **new workspace package** under `packages/*` (auto-included
 
 #### 1.1 Cross-cutting technical challenges
 
-| # | Challenge | Why it is hard | Approach |
-|---|---|---|---|
-| C1 | **Reuse identity, never duplicate it** (Passport + Socialite) | OAuth/OIDC need their own client/token/consent state, but identity must stay in `@framework/auth` | Both packages **consume** `@framework/auth`'s `UserProvider`, `AuthService.startSession`, the session cookie guard and the `Principal` — they add **authorization/social state only**, never a second user table or a second session mechanism. OAuth access tokens are **JWT-format, signed with the framework JWKS**, so the existing `jwt` guard verifies them unchanged (§1.2). |
-| C2 | **Zero new runtime dependencies** | Every added dep widens the peer boundary and the `bun build` external list | All five packages are implementable on what is already pinned: `jose@6` (JWT/JWKS/OIDC), `node:crypto` (hashing, PKCE, random), native `fetch` (outbound HTTP), `hono/jsx` (dashboard HTML), Drizzle `sql` (Postgres full-text). §1.3 proves the compatibility. |
-| C3 | **Non-interactive-first CLI contract** | Prompts must never hang CI/`--json`/`--no-interaction`; exit codes are a frozen contract | `@framework/prompts` separates **rendering** from **resolution**: a `PromptSession` resolves answers from (1) an injected answers map, (2) `default`, (3) a validator error, and only then (4) the TTY. `--no-interaction`/`--json` force path (1)/(2). Interrupt → `EXIT.INTERRUPTED (130)`. |
-| C4 | **Queued-by-default indexing without a second event system** | Scout must index on every write, but writes already publish domain events and queue jobs | `@framework/search` subscribes to the **existing** `EventBus` channels (`<channel>.created|updated|deleted|restored`) and dispatches a **`defineIndexJob`** over `@framework/queue` (queued by default; `inline` for tests/dev). No new bus, no new worker. |
-| C5 | **Honest capability reporting** (ADR-11) | Search backends and observability stores differ in capability; faking is forbidden | `SearchEngine` and `ObservatoryStore` expose a **capability report**; an unsupported operation throws a catalogued error (`CAPABILITY_UNSUPPORTED`), never a silent no-op. The Postgres driver reports `fullText` honestly; a future Meilisearch adapter reports `typoTolerance`/`facets`. |
-| C6 | **Never public by default** (ADR-8) | The Observatory dashboard and the OAuth authorize/consent screen are attack surfaces | Observatory routes are **disabled outside dev/test unless explicitly enabled** and always mounted behind an authorization guard (`requireAbility('observatory.view')` or an explicit `authorize` callback, exactly like `auditRoutes`). OAuth `/authorize` requires an authenticated `Principal` (session guard) before consent. |
-| C7 | **Observability ≠ tracing** | The M7 OpenTelemetry plan (tracing/metrics/OTLP) must not be duplicated | Observatory is **in-app, per-request, dev-time inspection** (Laravel Telescope semantics). It records into a local store and never exports spans. It reuses the **same instrumentation seams** OTel would (a query observer, the kernel `report` hook) but owns no OTLP pipeline (ADR-20). |
+| #   | Challenge                                                     | Why it is hard                                                                                    | Approach                                                                                                                                                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | **Reuse identity, never duplicate it** (Passport + Socialite) | OAuth/OIDC need their own client/token/consent state, but identity must stay in `@framework/auth` | Both packages **consume** `@framework/auth`'s `UserProvider`, `AuthService.startSession`, the session cookie guard and the `Principal` — they add **authorization/social state only**, never a second user table or a second session mechanism. OAuth access tokens are **JWT-format, signed with the framework JWKS**, so the existing `jwt` guard verifies them unchanged (§1.2). |
+| C2  | **Zero new runtime dependencies**                             | Every added dep widens the peer boundary and the `bun build` external list                        | All five packages are implementable on what is already pinned: `jose@6` (JWT/JWKS/OIDC), `node:crypto` (hashing, PKCE, random), native `fetch` (outbound HTTP), `hono/jsx` (dashboard HTML), Drizzle `sql` (Postgres full-text). §1.3 proves the compatibility.                                                                                                                     |
+| C3  | **Non-interactive-first CLI contract**                        | Prompts must never hang CI/`--json`/`--no-interaction`; exit codes are a frozen contract          | `@framework/prompts` separates **rendering** from **resolution**: a `PromptSession` resolves answers from (1) an injected answers map, (2) `default`, (3) a validator error, and only then (4) the TTY. `--no-interaction`/`--json` force path (1)/(2). Interrupt → `EXIT.INTERRUPTED (130)`.                                                                                       |
+| C4  | **Queued-by-default indexing without a second event system**  | Scout must index on every write, but writes already publish domain events and queue jobs          | `@framework/search` subscribes to the **existing** `EventBus` channels (`<channel>.created                                                                                                                                                                                                                                                                                          | updated | deleted | restored`) and dispatches a **`defineIndexJob`** over `@framework/queue`(queued by default;`inline` for tests/dev). No new bus, no new worker. |
+| C5  | **Honest capability reporting** (ADR-11)                      | Search backends and observability stores differ in capability; faking is forbidden                | `SearchEngine` and `ObservatoryStore` expose a **capability report**; an unsupported operation throws a catalogued error (`CAPABILITY_UNSUPPORTED`), never a silent no-op. The Postgres driver reports `fullText` honestly; a future Meilisearch adapter reports `typoTolerance`/`facets`.                                                                                          |
+| C6  | **Never public by default** (ADR-8)                           | The Observatory dashboard and the OAuth authorize/consent screen are attack surfaces              | Observatory routes are **disabled outside dev/test unless explicitly enabled** and always mounted behind an authorization guard (`requireAbility('observatory.view')` or an explicit `authorize` callback, exactly like `auditRoutes`). OAuth `/authorize` requires an authenticated `Principal` (session guard) before consent.                                                    |
+| C7  | **Observability ≠ tracing**                                   | The M7 OpenTelemetry plan (tracing/metrics/OTLP) must not be duplicated                           | Observatory is **in-app, per-request, dev-time inspection** (Laravel Telescope semantics). It records into a local store and never exports spans. It reuses the **same instrumentation seams** OTel would (a query observer, the kernel `report` hook) but owns no OTLP pipeline (ADR-20).                                                                                          |
 
 #### 1.2 The two elegant reuse points
 
 **(a) OAuth tokens the JWT guard already verifies.** `@framework/oauth-server` issues **JWT access tokens** signed by the framework's own JWKS (via `jose`, the same library the `jwt` guard uses). The existing guard (`packages/auth/src/jwt-guard.ts`) already:
+
 - verifies RS/ES/PS/EdDSA against a JWKS with `kid` rotation,
 - checks `iss`/`aud`,
 - maps the `scope` claim (space-delimited) → abilities,
@@ -58,16 +59,16 @@ So an access token minted by the OAuth server is accepted by **any** resource se
 
 Everything below is **already in the workspace**; **no new runtime dependency is introduced**. The optional future peers are named and bounded.
 
-| Concern | Choice | Pin | Compatibility & boundary |
-|---|---|---|---|
-| OAuth2/OIDC JWT + JWKS | **`jose`** | `6` (already a dep of `@framework/auth`) | Same lib/version the `jwt` guard uses; RS/ES/PS/EdDSA + `createLocalJWKSet`/`createRemoteJWKSet` + `jwtVerify`/`SignJWT`. Reused, not re-added. |
-| Opaque token / code / PKCE entropy | **`node:crypto`** | Bun builtin | `randomBytes`, `createHash('sha256')`, `createHash('base64url')` — identical discipline to `token-store.ts`/`session-store.ts`. |
-| Outbound provider HTTP (Socialite) | **native `fetch`** | Bun/Node builtin | No client lib. Retry/timeout via a tiny wrapper (mirrors the planned `Http::` helper, T13). |
-| Postgres full-text (Scout) | **Drizzle `sql`** + `tsvector`/`to_tsquery`/`GIN` | `drizzle-orm@0.45.3` | Uses the existing `DatabaseConnection`; no `pg_trgm`/extension requirement beyond `tsvector` (core PostgreSQL 17). |
-| Dashboard HTML (Observatory) | **`hono/jsx`** | `hono@4.13.12` | `jsxImportSource: hono/jsx` is already set in `tsconfig.base.json`; server-rendered, no frontend build. |
-| CLI raw-mode input (Prompts) | **`node:readline`** + `process.stdin.setRawMode` | Bun builtin | Bun implements `node:readline/promises` (already used in `run.ts`) and `process.stdin` raw mode; **line-mode readline fallback** if raw mode is unavailable (documented). |
-| Hashing at rest | **`node:crypto` sha256** | Bun builtin | Same hash-at-rest rule as sessions/api-tokens/account-tokens. |
-| Validation & config | **`zod@4.6.5`** | pinned | Config sections + request bodies; `z.toJSONSchema` for OpenAPI (via `@framework/openapi`). |
+| Concern                            | Choice                                            | Pin                                      | Compatibility & boundary                                                                                                                                                  |
+| ---------------------------------- | ------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OAuth2/OIDC JWT + JWKS             | **`jose`**                                        | `6` (already a dep of `@framework/auth`) | Same lib/version the `jwt` guard uses; RS/ES/PS/EdDSA + `createLocalJWKSet`/`createRemoteJWKSet` + `jwtVerify`/`SignJWT`. Reused, not re-added.                           |
+| Opaque token / code / PKCE entropy | **`node:crypto`**                                 | Bun builtin                              | `randomBytes`, `createHash('sha256')`, `createHash('base64url')` — identical discipline to `token-store.ts`/`session-store.ts`.                                           |
+| Outbound provider HTTP (Socialite) | **native `fetch`**                                | Bun/Node builtin                         | No client lib. Retry/timeout via a tiny wrapper (mirrors the planned `Http::` helper, T13).                                                                               |
+| Postgres full-text (Scout)         | **Drizzle `sql`** + `tsvector`/`to_tsquery`/`GIN` | `drizzle-orm@0.45.3`                     | Uses the existing `DatabaseConnection`; no `pg_trgm`/extension requirement beyond `tsvector` (core PostgreSQL 17).                                                        |
+| Dashboard HTML (Observatory)       | **`hono/jsx`**                                    | `hono@4.13.12`                           | `jsxImportSource: hono/jsx` is already set in `tsconfig.base.json`; server-rendered, no frontend build.                                                                   |
+| CLI raw-mode input (Prompts)       | **`node:readline`** + `process.stdin.setRawMode`  | Bun builtin                              | Bun implements `node:readline/promises` (already used in `run.ts`) and `process.stdin` raw mode; **line-mode readline fallback** if raw mode is unavailable (documented). |
+| Hashing at rest                    | **`node:crypto` sha256**                          | Bun builtin                              | Same hash-at-rest rule as sessions/api-tokens/account-tokens.                                                                                                             |
+| Validation & config                | **`zod@4.6.5`**                                   | pinned                                   | Config sections + request bodies; `z.toJSONSchema` for OpenAPI (via `@framework/openapi`).                                                                                |
 
 **Dependency boundaries (enforced by the dependency-graph rule, architecture §8.12):**
 
@@ -88,13 +89,13 @@ Everything below is **already in the workspace**; **no new runtime dependency is
 
 #### 1.4 SOLID + pattern mapping (per package, auditable)
 
-| Package | SRP | OCP | LSP | ISP | DIP | Patterns |
-|---|---|---|---|---|---|---|
-| `oauth-server` | server vs grants vs stores vs issuer vs routes | new grant = new `GrantHandler`; new token format = new `TokenIssuer` | all grants satisfy `GrantHandler`; both issuers satisfy `TokenIssuer` | narrow `OAuthClientStore`/`OAuthCodeStore`/`OAuthTokenStore`/`OAuthConsentStore` | server → contracts; routes → `AuthorizationServer` via token | **Strategy (grants, issuer), Repository (stores), Registry (grants/scopes), Template Method (grant pipeline)** |
-| `prompts` | renderer vs resolver vs each prompt type | new prompt = new `Prompt` impl | every prompt satisfies `Prompt` | `Prompt`/`Validator`/`Renderer` are separate | session → renderer abstraction; TTY renderer vs non-interactive | **Strategy (renderer), Builder (prompt chains), Null Object (non-interactive)** |
-| `search` | manager vs engine vs indexer vs jobs | new backend = new `SearchEngine`; new index = `defineSearchIndex` | all engines satisfy `SearchEngine` | `SearchEngine` + `Indexer` split | manager → engine by config; indexer → queue contract | **Ports & Adapters, Strategy (driver), Registry, Observer (event subscribe)** |
-| `socialite` | manager vs driver vs account-store vs routes | new provider = new `SocialProvider` | all drivers satisfy `SocialProvider` | `SocialProvider`, `SocialAccountStore` narrow | routes → `SocialiteManager` via token; manager → driver | **Strategy (driver), Registry, Adapter (provider → `SocialUser`), Facade-like manager** |
-| `observatory` | observatory vs watchers vs store vs routes | new watcher = new `Watcher`; new store = new `ObservatoryStore` | all watchers/stores satisfy their contracts | `Watcher`, `ObservatoryStore` narrow | observatory → store; watchers → observatory | **Observer (watchers), Strategy (store), Decorator (mail/cache watchers), Registry** |
+| Package        | SRP                                            | OCP                                                                  | LSP                                                                   | ISP                                                                              | DIP                                                             | Patterns                                                                                                       |
+| -------------- | ---------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `oauth-server` | server vs grants vs stores vs issuer vs routes | new grant = new `GrantHandler`; new token format = new `TokenIssuer` | all grants satisfy `GrantHandler`; both issuers satisfy `TokenIssuer` | narrow `OAuthClientStore`/`OAuthCodeStore`/`OAuthTokenStore`/`OAuthConsentStore` | server → contracts; routes → `AuthorizationServer` via token    | **Strategy (grants, issuer), Repository (stores), Registry (grants/scopes), Template Method (grant pipeline)** |
+| `prompts`      | renderer vs resolver vs each prompt type       | new prompt = new `Prompt` impl                                       | every prompt satisfies `Prompt`                                       | `Prompt`/`Validator`/`Renderer` are separate                                     | session → renderer abstraction; TTY renderer vs non-interactive | **Strategy (renderer), Builder (prompt chains), Null Object (non-interactive)**                                |
+| `search`       | manager vs engine vs indexer vs jobs           | new backend = new `SearchEngine`; new index = `defineSearchIndex`    | all engines satisfy `SearchEngine`                                    | `SearchEngine` + `Indexer` split                                                 | manager → engine by config; indexer → queue contract            | **Ports & Adapters, Strategy (driver), Registry, Observer (event subscribe)**                                  |
+| `socialite`    | manager vs driver vs account-store vs routes   | new provider = new `SocialProvider`                                  | all drivers satisfy `SocialProvider`                                  | `SocialProvider`, `SocialAccountStore` narrow                                    | routes → `SocialiteManager` via token; manager → driver         | **Strategy (driver), Registry, Adapter (provider → `SocialUser`), Facade-like manager**                        |
+| `observatory`  | observatory vs watchers vs store vs routes     | new watcher = new `Watcher`; new store = new `ObservatoryStore`      | all watchers/stores satisfy their contracts                           | `Watcher`, `ObservatoryStore` narrow                                             | observatory → store; watchers → observatory                     | **Observer (watchers), Strategy (store), Decorator (mail/cache watchers), Registry**                           |
 
 #### 1.5 Invariants that must survive (from brief §7 / architecture §1.7)
 
@@ -113,6 +114,7 @@ Everything below is **already in the workspace**; **no new runtime dependency is
 #### 2.1 Net-new files
 
 **`packages/oauth-server/` (Passport)**
+
 ```
 packages/oauth-server/package.json
 packages/oauth-server/tsconfig.json
@@ -141,6 +143,7 @@ packages/oauth-server/tests/routes.test.ts
 ```
 
 **`packages/prompts/` (Prompts)**
+
 ```
 packages/prompts/package.json
 packages/prompts/tsconfig.json
@@ -162,6 +165,7 @@ packages/prompts/tests/validation.test.ts
 ```
 
 **`packages/search/` (Scout)**
+
 ```
 packages/search/package.json
 packages/search/tsconfig.json
@@ -185,6 +189,7 @@ packages/search/tests/paginate.test.ts
 ```
 
 **`packages/socialite/` (Socialite)**
+
 ```
 packages/socialite/package.json
 packages/socialite/tsconfig.json
@@ -208,6 +213,7 @@ packages/socialite/tests/routes.test.ts
 ```
 
 **`packages/observatory/` (Telescope)**
+
 ```
 packages/observatory/package.json
 packages/observatory/tsconfig.json
@@ -236,6 +242,7 @@ packages/observatory/tests/prune.test.ts
 ```
 
 **CLI surface (new commands + generators)**
+
 ```
 packages/cli/src/commands/oauth.ts                 # oauth:client:create/list, oauth:key:generate
 packages/cli/src/commands/search.ts                # search:index, search:flush, search:status
@@ -251,6 +258,7 @@ packages/cli/tests/package-equivalents.test.ts     # oauth/search/observatory/so
 ```
 
 **demo-api auth integration (net-new)**
+
 ```
 apps/demo-api/app/modules/auth/provider.ts         # generated by make:auth
 apps/demo-api/app/modules/auth/routes.ts
@@ -260,6 +268,7 @@ apps/demo-api/tests/auth.api.test.ts               # auth smoke suite
 ```
 
 **Docs & audit artifacts**
+
 ```
 docs/architecture/laravel-concept-map.md           # extended with the 5 mappings (T21 file)
 apps/docs/src/content/docs/guides/oauth-server.mdx
@@ -330,7 +339,7 @@ interface OAuthClientStore {
 }
 
 interface OAuthCodeStore {
-  issue(input: IssueCodeInput): Promise<string>;                       // plaintext, single-use
+  issue(input: IssueCodeInput): Promise<string>; // plaintext, single-use
   consume(code: string, clientId: string): Promise<OAuthCodeRecord | null>; // PKCE-verified by caller
 }
 
@@ -350,7 +359,11 @@ interface OAuthConsentStore {
   revoke(userId: string, clientId: string): Promise<void>;
 }
 
-interface ScopeRegistry { register(scope: Scope): void; all(): readonly Scope[]; validate(names: readonly string[]): string[]; }
+interface ScopeRegistry {
+  register(scope: Scope): void;
+  all(): readonly Scope[];
+  validate(names: readonly string[]): string[];
+}
 
 /** Token format strategy. JwtTokenIssuer signs with the framework JWKS so the existing jwt guard verifies it. */
 interface TokenIssuer {
@@ -367,15 +380,17 @@ interface GrantHandler {
 class AuthorizationServer {
   constructor(deps: AuthorizationServerDeps);
   authorize(request: AuthorizeRequest, principal: Principal): Promise<AuthorizeDecision>; // consent or redirect
-  consent(principal: Principal, decision: ConsentDecision): Promise<string>;              // code
+  consent(principal: Principal, decision: ConsentDecision): Promise<string>; // code
   token(request: TokenRequest): Promise<TokenResponse>;
-  introspect(token: string): Promise<IntrospectionResponse>;                             // RFC 7662
-  revoke(token: string): Promise<void>;                                                   // RFC 7009
+  introspect(token: string): Promise<IntrospectionResponse>; // RFC 7662
+  revoke(token: string): Promise<void>; // RFC 7009
 }
 
 // ── @framework/prompts (Prompts) ─────────────────────────────────────────────
 type PromptAnswer = string | boolean | number | readonly string[];
-interface Validator<T> { (value: T): string | null; }                    // null = valid, string = message
+interface Validator<T> {
+  (value: T): string | null;
+} // null = valid, string = message
 
 interface Prompt<T extends PromptAnswer> {
   readonly kind: 'text' | 'confirm' | 'select' | 'multiselect' | 'password' | 'spinner';
@@ -404,7 +419,12 @@ interface PromptSession {
 }
 
 // ── @framework/search (Scout) ────────────────────────────────────────────────
-interface SearchCapabilities { readonly fullText: boolean; readonly filters: boolean; readonly typoTolerance: boolean; readonly facets: boolean; }
+interface SearchCapabilities {
+  readonly fullText: boolean;
+  readonly filters: boolean;
+  readonly typoTolerance: boolean;
+  readonly facets: boolean;
+}
 
 interface SearchEngine {
   readonly name: string;
@@ -432,7 +452,7 @@ class Indexer {
 
 // ── @framework/socialite (Socialite) ─────────────────────────────────────────
 interface SocialUser {
-  readonly id: string;                 // provider user id
+  readonly id: string; // provider user id
   readonly name: string;
   readonly email: string | null;
   readonly emailVerified: boolean;
@@ -441,7 +461,7 @@ interface SocialUser {
 }
 
 interface SocialProvider {
-  readonly name: string;               // 'google' | 'github' | ...
+  readonly name: string; // 'google' | 'github' | ...
   readonly usesPkce: boolean;
   redirectUrl(input: RedirectInput): string;
   exchangeCode(input: ExchangeInput): Promise<{ accessToken: string; idToken?: string }>;
@@ -472,7 +492,10 @@ interface ObservatoryEntry {
   readonly correlationId: string;
   readonly occurredAt: string;
 }
-interface Watcher { readonly name: WatcherName; record(entry: Omit<ObservatoryEntry, 'id' | 'watcher'>): Promise<void>; }
+interface Watcher {
+  readonly name: WatcherName;
+  record(entry: Omit<ObservatoryEntry, 'id' | 'watcher'>): Promise<void>;
+}
 interface ObservatoryStore {
   readonly capabilities: { readonly query: boolean; readonly prune: boolean };
   write(entry: ObservatoryEntry): Promise<void>;
@@ -551,34 +574,34 @@ typesense@^2        # @framework/search typesense driver    (optional peer, exte
 
 > **Rules honored:** the **first task (E01) is infrastructure** (manifests + package skeletons + entry files + CLI group registration, in ONE task); every task groups **≥3 related files**; grouped **by subsystem**, never one-file-per-task. Task IDs are an **`E`-series** (additive to the existing `T01`–`T22`); the **Wave** column maps each into the existing W0–W6 plan. Owners: `software-engineer` (impl), `software-qa-engineer` (audit/verification), `software-architect` (ADRs). **The concurrent lint/suite-fix workstream is out of scope here — do not duplicate it.**
 
-| Task | Name | Source files | Depends on | Priority | Owner | Wave | Parallelization note |
-|---|---|---|---|---|---|---|---|
-| **E01** | **Infrastructure: 5 package skeletons + CLI group wiring** | `packages/{oauth-server,prompts,search,socialite,observatory}/{package.json,tsconfig.json,src/index.ts,src/types.ts,src/constants.ts}`, `packages/cli/src/command.ts` (CommandGroup union + `CommandContext.prompts`), `packages/cli/src/commands/index.ts`, `packages/cli/src/commands/planned.ts`, `packages/cli/package.json` | — | P0 | software-engineer | W0-ext | **Unblocks all E-tasks.** Do not parallelize the skeleton/registry edits. Only touches new dirs + 3 CLI files. |
-| **E02** | **Prompts package (renderer + all prompt types + validators)** | `packages/prompts/src/{renderer,session,validate,text,confirm,select,multiselect,password,spinner}.ts`, `packages/prompts/tests/{prompts,validation}.test.ts` | E01 | P0 | software-engineer | W3 | Parallel (needs only E01). Zero deps — safest first package. |
-| **E03** | **Prompts ↔ CLI integration + non-interactive contract** | `packages/cli/src/context/prompts.ts`, `packages/cli/src/run.ts`, `packages/cli/src/command.ts`, `packages/cli/tests/prompts.test.ts`, `packages/prompts/tests/non-interactive.test.ts` | E02 | P0 | software-engineer | W3 | After E02. Freezes the `--no-interaction`/`--json`/exit-code behaviour; QA reviews. |
-| **E04** | **OAuth2 server core (contracts + schema + stores + scopes + issuer)** | `packages/oauth-server/src/{config-schema,schema/tables,client-store,code-store,token-store,consent-store,scopes,token-issuer}.ts`, `packages/oauth-server/tests/introspection.test.ts` | E01 | P0 | software-engineer | W3 | Parallel with E02/E06/E08/E10. Needs only E01. |
-| **E05** | **OAuth2 grants + server + routes + provider** | `packages/oauth-server/src/grants/*`, `packages/oauth-server/src/{server,routes,provider}.ts`, `packages/oauth-server/tests/{grants,pkce,routes}.test.ts` | E04 | P0 | software-engineer | W3 | Sequential after E04. QA-gated (RFC conformance: PKCE, single-use codes, introspection). |
-| **E06** | **Search core (engine contract + memory + postgres drivers + index definition)** | `packages/search/src/{config-schema,engine,engines/memory,engines/postgres,index-definition}.ts`, `packages/search/tests/{memory,postgres}.test.ts` | E01 | P1 | software-engineer | W3 | Parallel (needs only E01). Postgres driver needs real PostgreSQL for its test. |
-| **E07** | **Search indexing wiring + jobs + provider + re-index commands** | `packages/search/src/{searchable,indexer,jobs,manager,provider}.ts`, `packages/cli/src/commands/search.ts`, `packages/search/tests/{indexer,paginate}.test.ts`, `packages/cli/tests/package-equivalents.test.ts` | E06 | P1 | software-engineer | W3 | After E06. Needs `@framework/events`+`@framework/queue` (exist). |
-| **E08** | **Socialite core (contract + Google + GitHub drivers + manager + account store)** | `packages/socialite/src/{config-schema,schema/tables,provider-contract,drivers/google,drivers/github,drivers/index,manager,account-store}.ts`, `packages/socialite/tests/{google,github}.test.ts` | E01 | P1 | software-engineer | W3 | Parallel (needs only E01). Drivers tested against a fetch fake. |
-| **E09** | **Socialite routes + auth session integration** | `packages/socialite/src/{routes,provider}.ts`, `packages/socialite/tests/{linking,routes}.test.ts`, `packages/cli/src/commands/socialite.ts` | E08 | P1 | software-engineer | W3 | After E08. Needs `@framework/auth` (exists). Freezes account-linking policy. |
-| **E10** | **Observatory core (contract + stores + watchers + query seam)** | `packages/observatory/src/{config-schema,schema/tables,store,stores/memory,stores/postgres,observatory}.ts`, `packages/observatory/src/watchers/*.ts`, `packages/observatory/tests/{watchers,store}.test.ts`, `packages/database/src/connections/connection.ts`, `packages/database/src/index.ts`, `packages/events/src/bus.ts` | E01 | P1 | software-engineer | W3 | Parallel (needs only E01). Adds the query-observer + wildcard-subscribe seams. |
-| **E11** | **Observatory routes + authorization + prune/schedule + commands** | `packages/observatory/src/{routes,provider}.ts`, `packages/cli/src/commands/observatory.ts`, `packages/observatory/tests/{authorization,prune}.test.ts` | E10 | P1 | software-engineer | W3 | After E10. **Authorization is the gate** (never public by default, ADR-8/ADR-20). |
-| **E12** | **CLI generators: `make:oauth-client`, `make:socialite-provider` + oauth commands** | `packages/cli/src/generators/oauth/{generate,templates}.ts`, `packages/cli/src/generators/socialite/{generate,templates}.ts`, `packages/cli/src/commands/oauth.ts`, `packages/cli/tests/package-equivalents.test.ts` | E05, E09 | P2 | software-engineer | W4 | After E05+E09. Uses the shared plan/conflict/`--dry-run` pipeline (no new strategy). |
-| **E13** | **demo-api auth integration (make:auth-equivalent)** | `apps/demo-api/package.json`, `apps/demo-api/app/modules/auth/{provider,routes,index}.ts`, `apps/demo-api/config/index.ts`, `apps/demo-api/database/schema/index.ts`, `apps/demo-api/bootstrap/{providers,http}.ts`, `apps/demo-api/database/migrations/0001_create-auth-tables.sql`, `apps/demo-api/tests/auth.api.test.ts` | — (needs existing `make:auth`, T-phase-3 done) | P0 | software-engineer | W3 | **Independent** — needs only the existing auth package + CLI. Can start immediately in parallel with E01. |
-| **E14** | **Playground auth end-to-end audit** | `packages/auth/tests/e2e-auth-flows.test.ts`, `docs/architecture/auth-e2e-audit.md`, evidence under `apps/playground/tests/` | E13 | P0 | **software-qa-engineer** | W5 | **QA-owned.** After E13. Covers register/login/2FA/logout/me/verify/reset/tokens/jwt. |
-| **E15** | **Feature-Builder catalog integration for the 5 subsystems** | `packages/features/src/types.ts`, `packages/features/src/catalog.ts`, `packages/cli/src/features/manifest.ts`, `packages/features/tests/catalog.test.ts`, `packages/cli/tests/features.test.ts` | E01 (+ Feature Builder T03/T04) | P1 | software-engineer | W1/W5 | After the Feature Builder core exists; makes the 5 opt-in/removable (composability). |
-| **E16** | **Docs: Laravel-concept mapping + package guides + status** | `docs/architecture/laravel-concept-map.md`, `apps/docs/src/content/docs/guides/{oauth-server,prompts,search,socialite,observatory}.mdx`, `docs/status.md` | E02–E11 | P1 | software-engineer | W5 | After the packages land (docs quote frozen contracts). |
-| **E17** | **ADRs ADR-16…ADR-21** | `docs/architecture/decisions.md` | — | P0 | **software-architect** | W0-ext | Can land immediately (text specified in §5). |
-| **E18** | **CI gates + coverage thresholds + override tests for the 5 packages** | `.github/workflows/ci.yml`, `scripts/coverage.ts`, `packages/{oauth-server,prompts,search,socialite,observatory}/tests/*.override.test.ts` | E02–E11 | P1 | software-engineer | W5 | After the packages land. One override test per package (contract + default binding + app fake). |
+| Task    | Name                                                                                | Source files                                                                                                                                                                                                                                                                                                                     | Depends on                                     | Priority | Owner                    | Wave   | Parallelization note                                                                                           |
+| ------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------- | ------------------------ | ------ | -------------------------------------------------------------------------------------------------------------- |
+| **E01** | **Infrastructure: 5 package skeletons + CLI group wiring**                          | `packages/{oauth-server,prompts,search,socialite,observatory}/{package.json,tsconfig.json,src/index.ts,src/types.ts,src/constants.ts}`, `packages/cli/src/command.ts` (CommandGroup union + `CommandContext.prompts`), `packages/cli/src/commands/index.ts`, `packages/cli/src/commands/planned.ts`, `packages/cli/package.json` | —                                              | P0       | software-engineer        | W0-ext | **Unblocks all E-tasks.** Do not parallelize the skeleton/registry edits. Only touches new dirs + 3 CLI files. |
+| **E02** | **Prompts package (renderer + all prompt types + validators)**                      | `packages/prompts/src/{renderer,session,validate,text,confirm,select,multiselect,password,spinner}.ts`, `packages/prompts/tests/{prompts,validation}.test.ts`                                                                                                                                                                    | E01                                            | P0       | software-engineer        | W3     | Parallel (needs only E01). Zero deps — safest first package.                                                   |
+| **E03** | **Prompts ↔ CLI integration + non-interactive contract**                            | `packages/cli/src/context/prompts.ts`, `packages/cli/src/run.ts`, `packages/cli/src/command.ts`, `packages/cli/tests/prompts.test.ts`, `packages/prompts/tests/non-interactive.test.ts`                                                                                                                                          | E02                                            | P0       | software-engineer        | W3     | After E02. Freezes the `--no-interaction`/`--json`/exit-code behaviour; QA reviews.                            |
+| **E04** | **OAuth2 server core (contracts + schema + stores + scopes + issuer)**              | `packages/oauth-server/src/{config-schema,schema/tables,client-store,code-store,token-store,consent-store,scopes,token-issuer}.ts`, `packages/oauth-server/tests/introspection.test.ts`                                                                                                                                          | E01                                            | P0       | software-engineer        | W3     | Parallel with E02/E06/E08/E10. Needs only E01.                                                                 |
+| **E05** | **OAuth2 grants + server + routes + provider**                                      | `packages/oauth-server/src/grants/*`, `packages/oauth-server/src/{server,routes,provider}.ts`, `packages/oauth-server/tests/{grants,pkce,routes}.test.ts`                                                                                                                                                                        | E04                                            | P0       | software-engineer        | W3     | Sequential after E04. QA-gated (RFC conformance: PKCE, single-use codes, introspection).                       |
+| **E06** | **Search core (engine contract + memory + postgres drivers + index definition)**    | `packages/search/src/{config-schema,engine,engines/memory,engines/postgres,index-definition}.ts`, `packages/search/tests/{memory,postgres}.test.ts`                                                                                                                                                                              | E01                                            | P1       | software-engineer        | W3     | Parallel (needs only E01). Postgres driver needs real PostgreSQL for its test.                                 |
+| **E07** | **Search indexing wiring + jobs + provider + re-index commands**                    | `packages/search/src/{searchable,indexer,jobs,manager,provider}.ts`, `packages/cli/src/commands/search.ts`, `packages/search/tests/{indexer,paginate}.test.ts`, `packages/cli/tests/package-equivalents.test.ts`                                                                                                                 | E06                                            | P1       | software-engineer        | W3     | After E06. Needs `@framework/events`+`@framework/queue` (exist).                                               |
+| **E08** | **Socialite core (contract + Google + GitHub drivers + manager + account store)**   | `packages/socialite/src/{config-schema,schema/tables,provider-contract,drivers/google,drivers/github,drivers/index,manager,account-store}.ts`, `packages/socialite/tests/{google,github}.test.ts`                                                                                                                                | E01                                            | P1       | software-engineer        | W3     | Parallel (needs only E01). Drivers tested against a fetch fake.                                                |
+| **E09** | **Socialite routes + auth session integration**                                     | `packages/socialite/src/{routes,provider}.ts`, `packages/socialite/tests/{linking,routes}.test.ts`, `packages/cli/src/commands/socialite.ts`                                                                                                                                                                                     | E08                                            | P1       | software-engineer        | W3     | After E08. Needs `@framework/auth` (exists). Freezes account-linking policy.                                   |
+| **E10** | **Observatory core (contract + stores + watchers + query seam)**                    | `packages/observatory/src/{config-schema,schema/tables,store,stores/memory,stores/postgres,observatory}.ts`, `packages/observatory/src/watchers/*.ts`, `packages/observatory/tests/{watchers,store}.test.ts`, `packages/database/src/connections/connection.ts`, `packages/database/src/index.ts`, `packages/events/src/bus.ts`  | E01                                            | P1       | software-engineer        | W3     | Parallel (needs only E01). Adds the query-observer + wildcard-subscribe seams.                                 |
+| **E11** | **Observatory routes + authorization + prune/schedule + commands**                  | `packages/observatory/src/{routes,provider}.ts`, `packages/cli/src/commands/observatory.ts`, `packages/observatory/tests/{authorization,prune}.test.ts`                                                                                                                                                                          | E10                                            | P1       | software-engineer        | W3     | After E10. **Authorization is the gate** (never public by default, ADR-8/ADR-20).                              |
+| **E12** | **CLI generators: `make:oauth-client`, `make:socialite-provider` + oauth commands** | `packages/cli/src/generators/oauth/{generate,templates}.ts`, `packages/cli/src/generators/socialite/{generate,templates}.ts`, `packages/cli/src/commands/oauth.ts`, `packages/cli/tests/package-equivalents.test.ts`                                                                                                             | E05, E09                                       | P2       | software-engineer        | W4     | After E05+E09. Uses the shared plan/conflict/`--dry-run` pipeline (no new strategy).                           |
+| **E13** | **demo-api auth integration (make:auth-equivalent)**                                | `apps/demo-api/package.json`, `apps/demo-api/app/modules/auth/{provider,routes,index}.ts`, `apps/demo-api/config/index.ts`, `apps/demo-api/database/schema/index.ts`, `apps/demo-api/bootstrap/{providers,http}.ts`, `apps/demo-api/database/migrations/0001_create-auth-tables.sql`, `apps/demo-api/tests/auth.api.test.ts`     | — (needs existing `make:auth`, T-phase-3 done) | P0       | software-engineer        | W3     | **Independent** — needs only the existing auth package + CLI. Can start immediately in parallel with E01.      |
+| **E14** | **Playground auth end-to-end audit**                                                | `packages/auth/tests/e2e-auth-flows.test.ts`, `docs/architecture/auth-e2e-audit.md`, evidence under `apps/playground/tests/`                                                                                                                                                                                                     | E13                                            | P0       | **software-qa-engineer** | W5     | **QA-owned.** After E13. Covers register/login/2FA/logout/me/verify/reset/tokens/jwt.                          |
+| **E15** | **Feature-Builder catalog integration for the 5 subsystems**                        | `packages/features/src/types.ts`, `packages/features/src/catalog.ts`, `packages/cli/src/features/manifest.ts`, `packages/features/tests/catalog.test.ts`, `packages/cli/tests/features.test.ts`                                                                                                                                  | E01 (+ Feature Builder T03/T04)                | P1       | software-engineer        | W1/W5  | After the Feature Builder core exists; makes the 5 opt-in/removable (composability).                           |
+| **E16** | **Docs: Laravel-concept mapping + package guides + status**                         | `docs/architecture/laravel-concept-map.md`, `apps/docs/src/content/docs/guides/{oauth-server,prompts,search,socialite,observatory}.mdx`, `docs/status.md`                                                                                                                                                                        | E02–E11                                        | P1       | software-engineer        | W5     | After the packages land (docs quote frozen contracts).                                                         |
+| **E17** | **ADRs ADR-16…ADR-21**                                                              | `docs/architecture/decisions.md`                                                                                                                                                                                                                                                                                                 | —                                              | P0       | **software-architect**   | W0-ext | Can land immediately (text specified in §5).                                                                   |
+| **E18** | **CI gates + coverage thresholds + override tests for the 5 packages**              | `.github/workflows/ci.yml`, `scripts/coverage.ts`, `packages/{oauth-server,prompts,search,socialite,observatory}/tests/*.override.test.ts`                                                                                                                                                                                       | E02–E11                                        | P1       | software-engineer        | W5     | After the packages land. One override test per package (contract + default binding + app fake).                |
 
 #### 7.1 Owner summary
 
-| Owner | Tasks | Count |
-|---|---|---|
-| **software-engineer** | E01, E02, E03, E04, E05, E06, E07, E08, E09, E10, E11, E12, E13, E15, E16, E18 | 16 |
-| **software-qa-engineer** | E14 (+ review gate on E03, E05, E11) | 1 owned, 3 gated |
-| **software-architect** | E17 (ADRs) | 1 |
+| Owner                    | Tasks                                                                          | Count            |
+| ------------------------ | ------------------------------------------------------------------------------ | ---------------- |
+| **software-engineer**    | E01, E02, E03, E04, E05, E06, E07, E08, E09, E10, E11, E12, E13, E15, E16, E18 | 16               |
+| **software-qa-engineer** | E14 (+ review gate on E03, E05, E11)                                           | 1 owned, 3 gated |
+| **software-architect**   | E17 (ADRs)                                                                     | 1                |
 
 #### 7.2 QA / verification tasks
 
@@ -596,6 +619,7 @@ bun run --cwd apps/demo-api cli -- make:auth --guards session,api-token
 ```
 
 which performs (verified against `planAuth`):
+
 1. **`package.json`** — adds `"@framework/auth": "workspace:*"` (sorted), then `bun install`.
 2. **`app/modules/auth/{provider.ts,routes.ts,index.ts}`** — generated (`createAuthProvider<AppConfig>()` + `defineAuthRoutes({ service: AUTH_SERVICE, session, csrf })`).
 3. **`config/index.ts`** — `addImport` of `authConfigSchema`; `auth: authConfigSchema,` after `// @framework:config-schema-sections`; `auth: {},` after `// @framework:config-env-sections`.
@@ -612,17 +636,17 @@ Optional (recommended, not required): replace demo-api's production-deny on `/au
 
 **Goal:** prove the full `@framework/auth` surface end-to-end against real PostgreSQL in `apps/playground` (the reference app) and confirm the demo-api integration (E13) behaves identically. **Deliverables:** `packages/auth/tests/e2e-auth-flows.test.ts` + `docs/architecture/auth-e2e-audit.md` (scenario matrix + evidence).
 
-| # | Flow | Given / When / Then | Existing coverage | Gap to close |
-|---|---|---|---|---|
-| F1 | **Register** | POST `/register {name,email,password}` → 201, session cookie set, `users` row created, password argon2id | `routes.test.ts` | assert cookie attributes + `publicUser` projection (no `passwordHash`) |
-| F2 | **Login** | POST `/login` correct creds → 200 + rotated session; wrong creds → 401 (constant-time) | `routes.test.ts`, `rate-limit.test.ts` | assert session **rotation** (pre-login cookie dies) |
-| F3 | **Two-step TOTP** | enroll → enable → login returns `{ twoStep, challenge }` → POST `/two-step {challenge, code}` → 200 session; recovery code path | `account-security.test.ts` | assert challenge single-use + expired-challenge 401 |
-| F4 | **Logout** | POST `/logout` → 204, session revoked, cookie cleared | `routes.test.ts` | assert subsequent `/me` → 401 |
-| F5 | **Me** | GET `/me` (session) → 200 `{ user, via: 'session', abilities: ['*'] }` | `routes.test.ts` | assert API-token principal abilities echo |
-| F6 | **Email verification** | request → token delivered via notifier hook → POST `/email/verify` → 200, `emailVerifiedAt` set; `verified()` middleware passes | `account-security.test.ts` | assert single-use + expired token 422 |
-| F7 | **Password reset** | POST `/password/forgot` → 202 (no enumeration) → POST `/password/reset` → 204, **all** sessions + API tokens revoked | `account-security.test.ts` | assert full credential rotation |
-| F8 | **API tokens** | POST `/tokens` → 201 (plaintext once) → GET `/tokens` → list (no hash) → DELETE `/tokens/:id` → 204; Bearer auth works | `account-security.test.ts`, `routes.test.ts` | assert revoked/expired token → 401; cross-user revoke → 404 |
-| F9 | **JWT guard** | a JWT signed by the framework JWKS (e.g. minted by `@framework/oauth-server`) → GET `/me` → 200 `via: 'jwt'`, `scope` → abilities; bad `kid`/`aud` → 401 | `jwt-guard.test.ts` (remote-JWKS rotation) | assert **cross-package**: an OAuth-server access token authenticates via the jwt guard |
+| #   | Flow                   | Given / When / Then                                                                                                                                      | Existing coverage                            | Gap to close                                                                           |
+| --- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| F1  | **Register**           | POST `/register {name,email,password}` → 201, session cookie set, `users` row created, password argon2id                                                 | `routes.test.ts`                             | assert cookie attributes + `publicUser` projection (no `passwordHash`)                 |
+| F2  | **Login**              | POST `/login` correct creds → 200 + rotated session; wrong creds → 401 (constant-time)                                                                   | `routes.test.ts`, `rate-limit.test.ts`       | assert session **rotation** (pre-login cookie dies)                                    |
+| F3  | **Two-step TOTP**      | enroll → enable → login returns `{ twoStep, challenge }` → POST `/two-step {challenge, code}` → 200 session; recovery code path                          | `account-security.test.ts`                   | assert challenge single-use + expired-challenge 401                                    |
+| F4  | **Logout**             | POST `/logout` → 204, session revoked, cookie cleared                                                                                                    | `routes.test.ts`                             | assert subsequent `/me` → 401                                                          |
+| F5  | **Me**                 | GET `/me` (session) → 200 `{ user, via: 'session', abilities: ['*'] }`                                                                                   | `routes.test.ts`                             | assert API-token principal abilities echo                                              |
+| F6  | **Email verification** | request → token delivered via notifier hook → POST `/email/verify` → 200, `emailVerifiedAt` set; `verified()` middleware passes                          | `account-security.test.ts`                   | assert single-use + expired token 422                                                  |
+| F7  | **Password reset**     | POST `/password/forgot` → 202 (no enumeration) → POST `/password/reset` → 204, **all** sessions + API tokens revoked                                     | `account-security.test.ts`                   | assert full credential rotation                                                        |
+| F8  | **API tokens**         | POST `/tokens` → 201 (plaintext once) → GET `/tokens` → list (no hash) → DELETE `/tokens/:id` → 204; Bearer auth works                                   | `account-security.test.ts`, `routes.test.ts` | assert revoked/expired token → 401; cross-user revoke → 404                            |
+| F9  | **JWT guard**          | a JWT signed by the framework JWKS (e.g. minted by `@framework/oauth-server`) → GET `/me` → 200 `via: 'jwt'`, `scope` → abilities; bad `kid`/`aud` → 401 | `jwt-guard.test.ts` (remote-JWKS rotation)   | assert **cross-package**: an OAuth-server access token authenticates via the jwt guard |
 
 **Method:** real PostgreSQL via `@framework/testing` (`createTestDatabase`, always dropped); HTTP through the ephemeral loopback server (`serveOnEphemeralPort`) or `app.request`. Evidence = the suite output + a per-flow pass/fail table in `auth-e2e-audit.md`.
 
@@ -720,16 +744,16 @@ flowchart TD
 
 **Assumptions adopted (resolving ambiguity without blocking):**
 
-| ID | Assumption | Rationale |
-|---|---|---|
-| A1 | **Package names** are `@framework/{oauth-server,prompts,search,socialite,observatory}`; Laravel names are documented in the mapping doc. | Keeps the framework's subsystem-per-package convention; avoids the OpenTelemetry/`telemetry` naming clash for Telescope. |
-| A2 | **Zero new runtime deps.** Meilisearch/Typesense are documented optional peers, not installed. | Matches the pinned stack and the "optional peers kept external" rule; keeps the P0/P1 flows dependency-free. |
-| A3 | **OAuth access tokens default to JWT** signed by the framework JWKS; opaque tokens are supported via introspection. | Enables the existing `jwt` guard to verify OAuth tokens unchanged — the highest-value reuse. |
-| A4 | **Social account linking** requires a verified email to auto-link to an existing user; otherwise a new user is created. | Prevents silent account takeover via unverified provider emails. |
-| A5 | **Observatory is disabled outside dev/test** unless `observatory.enabled` is explicitly true, and always guarded. | Honors ADR-8 (never public by default). |
-| A6 | **`@framework/prompts` does not depend on `@framework/cli`**; the CLI adapts `CommandContext` → `PromptSession`. | Avoids a dependency cycle; keeps prompts reusable. |
-| A7 | **Bun supports `process.stdin.setRawMode`**; if not, the TTY renderer falls back to `node:readline` line-mode (still functional, no arrow-key select). | Documented fallback; no new dep either way. |
-| A8 | The **demo-api auth integration reuses `make:auth`** verbatim — no bespoke wiring. | One integration path; the generator's change set is the contract. |
+| ID  | Assumption                                                                                                                                             | Rationale                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| A1  | **Package names** are `@framework/{oauth-server,prompts,search,socialite,observatory}`; Laravel names are documented in the mapping doc.               | Keeps the framework's subsystem-per-package convention; avoids the OpenTelemetry/`telemetry` naming clash for Telescope. |
+| A2  | **Zero new runtime deps.** Meilisearch/Typesense are documented optional peers, not installed.                                                         | Matches the pinned stack and the "optional peers kept external" rule; keeps the P0/P1 flows dependency-free.             |
+| A3  | **OAuth access tokens default to JWT** signed by the framework JWKS; opaque tokens are supported via introspection.                                    | Enables the existing `jwt` guard to verify OAuth tokens unchanged — the highest-value reuse.                             |
+| A4  | **Social account linking** requires a verified email to auto-link to an existing user; otherwise a new user is created.                                | Prevents silent account takeover via unverified provider emails.                                                         |
+| A5  | **Observatory is disabled outside dev/test** unless `observatory.enabled` is explicitly true, and always guarded.                                      | Honors ADR-8 (never public by default).                                                                                  |
+| A6  | **`@framework/prompts` does not depend on `@framework/cli`**; the CLI adapts `CommandContext` → `PromptSession`.                                       | Avoids a dependency cycle; keeps prompts reusable.                                                                       |
+| A7  | **Bun supports `process.stdin.setRawMode`**; if not, the TTY renderer falls back to `node:readline` line-mode (still functional, no arrow-key select). | Documented fallback; no new dep either way.                                                                              |
+| A8  | The **demo-api auth integration reuses `make:auth`** verbatim — no bespoke wiring.                                                                     | One integration path; the generator's change set is the contract.                                                        |
 
 **Genuinely open (needs a decision before/within the task):**
 
@@ -738,4 +762,4 @@ flowchart TD
 3. **Search Postgres ranking.** `tsvector` + `ts_rank` (recommended, no extension) vs `pg_trgm` similarity (needs the extension). Recommendation: `tsvector` first; `pg_trgm` as a documented capability when present.
 4. **Social token endpoint for SPAs/mobiles.** Whether to ship the stateless `POST /auth/social/:provider/token` (code + verifier → framework session/API token) in the first cut. Recommendation: ship it — it is small and unblocks SPA clients.
 5. **Consent screen rendering.** Whether `@framework/oauth-server` ships a default `hono/jsx` consent page or requires the app to supply one. Recommendation: ship a minimal default + allow an app override (mirrors the Observatory HTML decision).
-6. **Feature Builder `FeatureName` for `prompts`.** Whether `prompts` is a *feature* at all (it is CLI-only, not a runtime subsystem). Recommendation: model it as a CLI-tier capability rather than a runtime feature; confirm in E15.
+6. **Feature Builder `FeatureName` for `prompts`.** Whether `prompts` is a _feature_ at all (it is CLI-only, not a runtime subsystem). Recommendation: model it as a CLI-tier capability rather than a runtime feature; confirm in E15.

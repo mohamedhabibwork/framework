@@ -38,8 +38,8 @@ export const project = defineProject({
   tools: {
     typecheck: ['bunx', 'tsc', '-p', 'tsconfig.json'],
     test: ['bun', 'test'],
-    lint: ['bunx', 'biome', 'check', '.'],
-    format: ['bunx', 'biome', 'format', '.'],
+    lint: ['bunx', 'oxlint', '.'],
+    format: ['bunx', 'oxfmt', '.'],
     drizzleKit: ['bunx', 'drizzle-kit'],
     dev: ['bun', 'run', '--hot', 'bin/server.ts'],
     serve: ['bun', 'run', 'bin/server.ts'],

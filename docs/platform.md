@@ -11,10 +11,10 @@ One immutable `ExecutionContext` per scope (request, job, command) carries
 
 ```ts
 class ExecutionContext {
-  readonly kind: ScopeKind;          // 'request' | 'job' | 'command' | 'test'
-  readonly correlationId: string;    // request id / job correlation
-  readonly actor: Actor;             // { id, type: user|service|system|anonymous }
-  withActor(actor: Actor): ExecutionContext;   // e.g. after authentication
+  readonly kind: ScopeKind; // 'request' | 'job' | 'command' | 'test'
+  readonly correlationId: string; // request id / job correlation
+  readonly actor: Actor; // { id, type: user|service|system|anonymous }
+  withActor(actor: Actor): ExecutionContext; // e.g. after authentication
 }
 ```
 
@@ -24,8 +24,8 @@ identity. Repositories receive a `DataContext`:
 
 ```ts
 interface DataContext {
-  readonly transactions: TransactionContext;  // transaction propagation
-  readonly execution: ExecutionContext;       // actor + correlation for audit/events
+  readonly transactions: TransactionContext; // transaction propagation
+  readonly execution: ExecutionContext; // actor + correlation for audit/events
 }
 ```
 
@@ -55,20 +55,21 @@ Helpers: `notFound()`, `badRequest()`, `conflict()`, `forbidden()`,
 `serviceUnavailable()`. Unknown exceptions become a redacted `500
 INTERNAL_ERROR` (details only when `exposeInternalErrors` is on).
 
-| Code | Status | | Code | Status |
-|---|---|---|---|---|
-| `BAD_REQUEST` / `MALFORMED_JSON` | 400 | | `PAYLOAD_TOO_LARGE` | 413 |
-| `UNAUTHENTICATED` | 401 | | `UNSUPPORTED_MEDIA_TYPE` | 415 |
-| `FORBIDDEN` | 403 | | `VALIDATION_FAILED` | 422 |
-| `NOT_FOUND` / `ROUTE_NOT_FOUND` | 404 | | `TOO_MANY_REQUESTS` | 429 |
-| `METHOD_NOT_ALLOWED` | 405 | | `INTERNAL_ERROR` | 500 |
-| `CONFLICT` / `UNIQUE_VIOLATION` / `FOREIGN_KEY_VIOLATION` | 409 | | `SERVICE_UNAVAILABLE` | 503 |
+| Code                                                      | Status |     | Code                     | Status |
+| --------------------------------------------------------- | ------ | --- | ------------------------ | ------ |
+| `BAD_REQUEST` / `MALFORMED_JSON`                          | 400    |     | `PAYLOAD_TOO_LARGE`      | 413    |
+| `UNAUTHENTICATED`                                         | 401    |     | `UNSUPPORTED_MEDIA_TYPE` | 415    |
+| `FORBIDDEN`                                               | 403    |     | `VALIDATION_FAILED`      | 422    |
+| `NOT_FOUND` / `ROUTE_NOT_FOUND`                           | 404    |     | `TOO_MANY_REQUESTS`      | 429    |
+| `METHOD_NOT_ALLOWED`                                      | 405    |     | `INTERNAL_ERROR`         | 500    |
+| `CONFLICT` / `UNIQUE_VIOLATION` / `FOREIGN_KEY_VIOLATION` | 409    |     | `SERVICE_UNAVAILABLE`    | 503    |
 
 Validation failures include field-level errors:
 
 ```json
-{ "error": { "code": "VALIDATION_FAILED", "fields": [
-  { "path": "name", "message": "too_small", "code": "too_small" } ] } }
+{
+  "error": { "code": "VALIDATION_FAILED", "fields": [{ "path": "name", "message": "too_small", "code": "too_small" }] }
+}
 ```
 
 ## Pagination, filtering, sorting
@@ -79,7 +80,7 @@ clamp):
 ```json
 // GET /api/v1/products?page=2&limit=20
 {
-  "items": [ /* … */ ],
+  "items": [/* … */],
   "meta": { "page": 2, "limit": 20, "total": 100, "totalPages": 5 }
 }
 ```
@@ -93,7 +94,7 @@ const page = await repository.paginate(
   { page: 1, limit: 20 },
   {
     filters: [ilike(products.name, `%${q}%`), gte(products.price, minPrice)],
-    sort: [{ column: products.price, direction: 'desc' }],   // `id` always sorts last
+    sort: [{ column: products.price, direction: 'desc' }], // `id` always sorts last
   },
 );
 ```
@@ -173,7 +174,7 @@ Generated applications and the playground serve a `WebsocketGateway` at
 
 ```ts
 // bootstrap/http.ts (generated)
-application.container.resolve(WEBSOCKET_GATEWAY).routes()
+application.container.resolve(WEBSOCKET_GATEWAY).routes();
 
 // server-side push from anywhere with a scope
 const gateway = scope.resolve(WEBSOCKET_GATEWAY);
@@ -191,11 +192,11 @@ export const resizeImage = defineJob({
   name: 'images.resize',
   version: 1,
   payload: z.object({ imageId: z.string().uuid() }),
-  attempts: 3,                       // exponential backoff (default 1s)
+  attempts: 3, // exponential backoff (default 1s)
   timeoutMs: 60_000,
-  idempotencyKey: (p) => `resize-${p.imageId}`,   // duplicate dispatches collapse
+  idempotencyKey: (p) => `resize-${p.imageId}`, // duplicate dispatches collapse
   async handle(payload, ctx) {
-    await ctx.progress(50);          // reported to BullMQ
+    await ctx.progress(50); // reported to BullMQ
     return { resized: payload.imageId };
   },
 });
@@ -206,13 +207,13 @@ Register it in `app/jobs/index.ts`, dispatch from anywhere with a scope:
 ```ts
 const queue = scope.resolve(QUEUE);
 await queue.dispatch(resizeImage, { imageId }, scope.resolve(EXECUTION_CONTEXT));
-await queue.status(jobId);   // state, progress, attempts, result, failedReason
+await queue.status(jobId); // state, progress, attempts, result, failedReason
 ```
 
 The worker (`bun run worker` or `queue:work`) runs each job in a fresh scope
 carrying the dispatcher's actor/correlation id, enforces per-job timeouts,
 and drains gracefully on SIGTERM/SIGINT. Payloads are validated before
-enqueue *and* before execution; unknown job names or version mismatches fail
+enqueue _and_ before execution; unknown job names or version mismatches fail
 without retrying. `queue:status` shows counts per state.
 
 ### Batches
@@ -223,9 +224,9 @@ Fan out many jobs as one unit with batch bookkeeping in Redis:
 const { batchId, jobIds } = await queue.dispatchBatch(resizeImage, payloads, execution, {
   onComplete: { name: 'images.batch-done', version: 1, payload: { batchId, total: payloads.length } },
 });
-await queue.batchStatus(batchId);   // running | completed | partially-failed | cancelled + counters
+await queue.batchStatus(batchId); // running | completed | partially-failed | cancelled + counters
 await queue.batchFailures(batchId); // the failed jobs, for inspection/replay
-await queue.cancelBatch(batchId);   // remaining jobs fail fast as unrecoverable
+await queue.cancelBatch(batchId); // remaining jobs fail fast as unrecoverable
 ```
 
 Counters move with atomic `HINCRBY`/`HSETNX` bookkeeping, so concurrent
@@ -245,19 +246,21 @@ import { z } from 'zod/v4';
 
 const chargeCard = defineAction({
   name: 'charge-card',
-  via: 'queue',                        // run as its own BullMQ job (default 'inline')
-  input: z.object({ orderId: z.string() }),   // zod-validates the state slice
+  via: 'queue', // run as its own BullMQ job (default 'inline')
+  input: z.object({ orderId: z.string() }), // zod-validates the state slice
   attempts: 3,
-  precheck: (state) => { if (!state.reserved) throw new Error('not reserved'); },
+  precheck: (state) => {
+    if (!state.reserved) throw new Error('not reserved');
+  },
   run: (input) => ({ chargeId: `ch_${input.orderId}` }),
-  compensate: (state) => refund(state.chargeId),   // runs newest-first on failure
+  compensate: (state) => refund(state.chargeId), // runs newest-first on failure
 });
 
 export const orderFulfillment = defineWorkflow({
   name: 'order-fulfillment',
   version: 1,
-  input: z.object({ orderId: z.string() }),   // seeds the run state
-  onFailure: 'compensate',                    // or 'halt'
+  input: z.object({ orderId: z.string() }), // seeds the run state
+  onFailure: 'compensate', // or 'halt'
   stages: [
     defineStage({ name: 'stock', actions: [reserveStock] }),
     defineStage({ name: 'fulfill', actions: parallel([chargeCard, createShipment]) }),
@@ -279,8 +282,8 @@ dispatch from anywhere:
 
 ```ts
 const { runId } = await manager.dispatch(orderFulfillment, { orderId }, execution);
-const status = await manager.status(runId);   // run + full node tree
-await manager.cancel(runId);                  // or retry(runId, { fromNode }), resume(runId), prune(days)
+const status = await manager.status(runId); // run + full node tree
+await manager.cancel(runId); // or retry(runId, { fromNode }), resume(runId), prune(days)
 ```
 
 **Workers**: merge the engine's internal jobs into the regular `JobWorker` —
@@ -290,7 +293,7 @@ one process, one queue:
 const engine = new WorkflowEngine(application, manager, queue, bus);
 const worker = new JobWorker(queue, application, [...jobs, ...engine.jobs], { concurrency: 4 });
 worker.start();
-engine.start();   // wait-for-event bridge + timeout sweep
+engine.start(); // wait-for-event bridge + timeout sweep
 ```
 
 Actions marked `via: 'queue'` and queued stages execute as their own BullMQ
@@ -320,7 +323,7 @@ export const nightlySummary = defineSchedule({
   name: 'orders-nightly-summary',
   cron: '0 3 * * *',
   timezone: 'Europe/Berlin',
-  overlap: 'skip',                 // Redis lock until the next due run
+  overlap: 'skip', // Redis lock until the next due run
   dispatch: { kind: 'workflow', workflow: 'order-fulfillment', input: () => ({ orderId: 'nightly' }) },
 });
 ```
@@ -338,9 +341,9 @@ Long-running data moves run as queued jobs via `@framework/crud`:
 const importJob = defineImportJob({
   resource: 'products',
   repository: PRODUCT_REPOSITORY,
-  rowSchema: createProductSchema,          // every row validated
-  columns: ['name', 'price'],              // strict CSV header
-  batchSize: 100,                          // one transaction per batch: partial success
+  rowSchema: createProductSchema, // every row validated
+  columns: ['name', 'price'], // strict CSV header
+  batchSize: 100, // one transaction per batch: partial success
 });
 
 const exportJob = defineExportJob({
@@ -348,19 +351,19 @@ const exportJob = defineExportJob({
   repository: PRODUCT_REPOSITORY,
   columns: ['id', 'name', 'price'],
   serialize: toProductResponse,
-  store,                                   // ExportStore (LocalExportStore ships built-in)
+  store, // ExportStore (LocalExportStore ships built-in)
 });
 ```
 
 Wire them into a `DataPorter` and mount `importExportRoutes`:
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /api/v1/data/import` | `{ resource, format: csv\|json, content }` → `202 { jobId }` |
-| `GET  /api/v1/data/import/status/:jobId` | State, row counts, per-row errors |
-| `POST /api/v1/data/export` | `{ resource, format: csv\|json }` → `202 { jobId }` |
-| `GET  /api/v1/data/export/status/:jobId` | Progress (`export.progress` events on the bus) |
-| `GET  /api/v1/data/export/download/:jobId` | The finished artifact (streamed attachment) |
+| Endpoint                                   | Purpose                                                      |
+| ------------------------------------------ | ------------------------------------------------------------ |
+| `POST /api/v1/data/import`                 | `{ resource, format: csv\|json, content }` → `202 { jobId }` |
+| `GET  /api/v1/data/import/status/:jobId`   | State, row counts, per-row errors                            |
+| `POST /api/v1/data/export`                 | `{ resource, format: csv\|json }` → `202 { jobId }`          |
+| `GET  /api/v1/data/export/status/:jobId`   | Progress (`export.progress` events on the bus)               |
+| `GET  /api/v1/data/export/download/:jobId` | The finished artifact (streamed attachment)                  |
 
 **These endpoints are OpenAPI-documented**: add
 `...dataOperations({ mount: '/api/v1/data', resources: ['products'] })` to

@@ -70,9 +70,7 @@ Conventions that keep money and timestamps correct in JSON:
 ```ts
 import { Creatable, Deletable, Readable, RepositoryCore, SoftDeletable, Updatable } from '@framework/database';
 
-export class ProductRepository extends SoftDeletable(
-  Updatable(Creatable(Readable(RepositoryCore<typeof products>))),
-) {}
+export class ProductRepository extends SoftDeletable(Updatable(Creatable(Readable(RepositoryCore<typeof products>)))) {}
 ```
 
 - `Readable` — `findById`, `paginate` (bounded, deterministic `id` ordering),
@@ -137,8 +135,8 @@ subclasses as `this.context` (and `this.execution` for short):
 
 ```ts
 interface ServiceContext {
-  readonly execution: ExecutionContext;        // actor + correlation id
-  readonly transactions?: TransactionContext;  // scope's transaction chain
+  readonly execution: ExecutionContext; // actor + correlation id
+  readonly transactions?: TransactionContext; // scope's transaction chain
 }
 ```
 
@@ -161,10 +159,10 @@ events publish after the write commits):
 
 ```ts
 new ProductService(repository, dataContext, {
-  channel: 'products',                       // publishes products.created|updated|…
-  bus,                                       // EventBus binding (skipped when absent)
+  channel: 'products', // publishes products.created|updated|…
+  bus, // EventBus binding (skipped when absent)
   serialize: (entity) => toProductResponse(entity),
-})
+});
 ```
 
 Unknown ids throw the framework's `404 NOT_FOUND` envelope (customizable via
@@ -244,8 +242,8 @@ import { resourceOperations } from '@framework/crud';
 
 export const productOperations = resourceOperations({
   mount: '/api/v1/products',
-  resource: 'Product',          // operationIds: listProduct(s), createProduct, …
-  security: 'public',           // or ['bearerAuth'] once auth exists
+  resource: 'Product', // operationIds: listProduct(s), createProduct, …
+  security: 'public', // or ['bearerAuth'] once auth exists
   schemas: {
     create: createProductSchema,
     update: updateProductSchema,
@@ -291,12 +289,12 @@ container.scoped(PRODUCT_CONTROLLER, (r) => new ProductController(r.resolve(PROD
 
 Registration points (all idempotent, marker-based):
 
-| What | File | Marker |
-|---|---|---|
-| Schema export | `database/schema/index.ts` | `// @framework:schema-exports` |
-| Provider | `bootstrap/providers.ts` | `// @framework:providers` |
-| Routes | `routes/api.ts` | `// @framework:routes` |
-| OpenAPI | `bootstrap/openapi.ts` | `// @framework:openapi-operations` |
+| What          | File                       | Marker                             |
+| ------------- | -------------------------- | ---------------------------------- |
+| Schema export | `database/schema/index.ts` | `// @framework:schema-exports`     |
+| Provider      | `bootstrap/providers.ts`   | `// @framework:providers`          |
+| Routes        | `routes/api.ts`            | `// @framework:routes`             |
+| OpenAPI       | `bootstrap/openapi.ts`     | `// @framework:openapi-operations` |
 
 `make:crud` updates all of them; when editing by hand, register in the same
 four places.

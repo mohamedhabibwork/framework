@@ -17,11 +17,11 @@ bun run mcp                      # stdio transport
 FRAMEWORK_APP_DIR=apps/my-api bun run mcp   # target another generated app
 ```
 
-| Env | Meaning | Default |
-|---|---|---|
-| `FRAMEWORK_APP_DIR` | App directory whose `bin/cli.ts` is bridged (workspace-relative or absolute) | `apps/playground` |
-| `FRAMEWORK_ROOT` | Workspace root override | auto-detected |
-| `FRAMEWORK_MCP_TIMEOUT_MS` | Per-invocation timeout | `120000` |
+| Env                        | Meaning                                                                      | Default           |
+| -------------------------- | ---------------------------------------------------------------------------- | ----------------- |
+| `FRAMEWORK_APP_DIR`        | App directory whose `bin/cli.ts` is bridged (workspace-relative or absolute) | `apps/playground` |
+| `FRAMEWORK_ROOT`           | Workspace root override                                                      | auto-detected     |
+| `FRAMEWORK_MCP_TIMEOUT_MS` | Per-invocation timeout                                                       | `120000`          |
 
 ### Tools
 
@@ -61,13 +61,13 @@ change to bridge them.
 Project skills live in `.zcode/skills/` (loaded by ZCode from this repository) and are
 mirrored by the same content in `docs/`:
 
-| Skill | Covers |
-|---|---|
-| `hono-framework` | Workspace layout, CLI envelope contract, checks, doc map |
-| `hono-framework-crud` | `make:crud` field grammar, modes, dry-run → verify workflow, file ownership |
-| `hono-framework-auth` | `make:auth`, guards, abilities, TOTP/recovery/JWT flows, deny-by-default |
-| `hono-framework-testing` | Isolated databases, generated suites, release gate |
-| `hono-framework-ops` | Migrations, queues, schedules, workflows, maintenance commands |
+| Skill                    | Covers                                                                      |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `hono-framework`         | Workspace layout, CLI envelope contract, checks, doc map                    |
+| `hono-framework-crud`    | `make:crud` field grammar, modes, dry-run → verify workflow, file ownership |
+| `hono-framework-auth`    | `make:auth`, guards, abilities, TOTP/recovery/JWT flows, deny-by-default    |
+| `hono-framework-testing` | Isolated databases, generated suites, release gate                          |
+| `hono-framework-ops`     | Migrations, queues, schedules, workflows, maintenance commands              |
 
 For Claude Code, symlink the folder: `ln -s .zcode/skills .claude/skills`.
 

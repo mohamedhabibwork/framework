@@ -218,13 +218,27 @@ function buildStandalonePackageManifest(pkgName: string): Record<string, unknown
     },
     main: './src/index.ts',
     types: './src/index.ts',
+    scripts: raw.scripts ?? {
+      lint: 'oxlint',
+      'lint:fix': 'oxlint --fix',
+      format: 'oxfmt',
+      'format:check': 'oxfmt --check',
+      typecheck: 'tsc --noEmit',
+      test: 'bun test',
+    },
   };
   if (raw.bin) manifest.bin = raw.bin;
   if (raw.exports) manifest.exports = raw.exports;
   const dependencies = rewriteDeps(raw.dependencies as Record<string, string> | undefined);
-  const devDependencies = rewriteDeps(raw.devDependencies as Record<string, string> | undefined);
+  const devDependencies = {
+    '@types/bun': '1.4.2',
+    oxfmt: '0.75.0',
+    oxlint: '1.90.0',
+    typescript: '7.0.2',
+    ...(rewriteDeps(raw.devDependencies as Record<string, string> | undefined) ?? {}),
+  };
   if (dependencies) manifest.dependencies = dependencies;
-  if (devDependencies) manifest.devDependencies = devDependencies;
+  manifest.devDependencies = Object.fromEntries(Object.entries(devDependencies).sort(([a], [b]) => a.localeCompare(b)));
   return manifest;
 }
 
@@ -436,6 +450,8 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install
+      - run: bun run format:check
+      - run: bun run lint
       - run: bun run typecheck
 `,
   );

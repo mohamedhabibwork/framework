@@ -12,15 +12,15 @@ per-package coverage gate) with tracing/metrics still planned; **M4** and
 
 ## Priorities
 
-| # | Milestone | Why now | Size |
-|---|---|---|---|
-| M1 | Security hardening | Unprotected admin routes block production use | M |
-| M2 | Auth completion (Phase 3 deferred) | Recovery/verification/OTP/JWT are table stakes | L |
-| M3 | Database & CLI lifecycle | `db:seed/rollback/fresh` + `make:*` are the daily DX loop | L |
-| M4 | CRUD generator depth | Relations/enums/JSON/ownership are the most common hand-written code | L |
-| M5 | Multi-node & deployment | Local export store, no Dockerfile | M |
-| M6 | Drivers & formats | SMTP, SMS, cloud storage, XLSX/PDF | M |
-| M7 | Observability & DX polish | Tracing/metrics, route-detection edge case | S–M |
+| #   | Milestone                          | Why now                                                              | Size |
+| --- | ---------------------------------- | -------------------------------------------------------------------- | ---- |
+| M1  | Security hardening                 | Unprotected admin routes block production use                        | M    |
+| M2  | Auth completion (Phase 3 deferred) | Recovery/verification/OTP/JWT are table stakes                       | L    |
+| M3  | Database & CLI lifecycle           | `db:seed/rollback/fresh` + `make:*` are the daily DX loop            | L    |
+| M4  | CRUD generator depth               | Relations/enums/JSON/ownership are the most common hand-written code | L    |
+| M5  | Multi-node & deployment            | Local export store, no Dockerfile                                    | M    |
+| M6  | Drivers & formats                  | SMTP, SMS, cloud storage, XLSX/PDF                                   | M    |
+| M7  | Observability & DX polish          | Tracing/metrics, route-detection edge case                           | S–M  |
 
 ## M1 — Security hardening (first)
 

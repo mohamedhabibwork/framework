@@ -8,15 +8,15 @@ application's own adapter.
 
 ## Shared options
 
-| Option | Effect |
-|---|---|
-| `--help`, `-h` | Usage, arguments, options, examples, capability requirements |
-| `--version`, `-V` | CLI and framework versions |
-| `--cwd <path>` | Explicit project root |
-| `--env-file <path>` | Explicit environment file (process env still wins) |
-| `--json` | Machine-readable envelope on stdout: `{ command, status, data, warnings }`; diagnostics go to stderr |
-| `--no-interaction` | Disable prompts; missing required input is an error |
-| `--verbose` | Additional diagnostics (secrets redacted) |
+| Option              | Effect                                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `--help`, `-h`      | Usage, arguments, options, examples, capability requirements                                         |
+| `--version`, `-V`   | CLI and framework versions                                                                           |
+| `--cwd <path>`      | Explicit project root                                                                                |
+| `--env-file <path>` | Explicit environment file (process env still wins)                                                   |
+| `--json`            | Machine-readable envelope on stdout: `{ command, status, data, warnings }`; diagnostics go to stderr |
+| `--no-interaction`  | Disable prompts; missing required input is an error                                                  |
+| `--verbose`         | Additional diagnostics (secrets redacted)                                                            |
 
 Exit codes: `0` success · `1` execution failure · `2` invalid usage ·
 `3` unsupported capability · `130` interrupted.
@@ -29,11 +29,11 @@ the live catalog with planned/implemented/validated status.
 
 Generate a complete application into an empty directory.
 
-| Option | Effect |
-|---|---|
-| `--with-demo` | Also generate a sample `products` module (files + migration) via `make:crud` inside the new app |
-| `--no-install` | Skip dependency installation (also skips `--with-demo`) |
-| `--template`, `--runtime`, `--package-manager` | Only `api` / `bun` / `bun` are validated |
+| Option                                         | Effect                                                                                          |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `--with-demo`                                  | Also generate a sample `products` module (files + migration) via `make:crud` inside the new app |
+| `--no-install`                                 | Skip dependency installation (also skips `--with-demo`)                                         |
+| `--template`, `--runtime`, `--package-manager` | Only `api` / `bun` / `bun` are validated                                                        |
 
 ```sh
 bun run cli -- create apps/inventory-api --with-demo
@@ -83,20 +83,20 @@ Drizzle–Zod schemas, DTOs, form requests, repository (mixins), service,
 controller, policy, typed native Hono routes, OpenAPI operations, fixtures,
 an endpoint test suite — and registers everything via explicit markers.
 
-| Option | Effect |
-|---|---|
-| `--module <name>` | Destination module (default: resource plural) |
-| `--fields '<spec>'` | New table: `name:type:required\|nullable\|default=<literal>, …` (types: text, integer, numeric, boolean, uuid, timestamp) |
-| `--table <export>` | Reuse an existing Drizzle table export (mutually exclusive with `--fields`) |
-| `--schema-file <path>` | Where `--table` is exported (default: schema index) |
-| `--definition <path>` | JSON resource definition for enums/relations/exposure/fixtures |
-| `--route <path>` | Mount path (default `/api/v1/<module>`) |
-| `--access public\|authenticated` | Required. `authenticated` wraps every route in `requireAuth()`, emits an ability-checking policy (`<resource>.<ability>` token abilities, `*` for sessions) and generates 401/403 endpoint cases. Requires the auth module (`make:auth`) |
-| `--soft-delete` | Adds `deletedAt` + restore behavior and deletion tests |
-| `--verify` | Typecheck + run the endpoint suite on an isolated PostgreSQL database |
-| `--test-mode in-process\|network` | Endpoint transport for verification (default in-process) |
-| `--dry-run` | Preview every file change and the test plan; write nothing |
-| `--force` | Overwrite generator-owned files of this module only |
+| Option                            | Effect                                                                                                                                                                                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--module <name>`                 | Destination module (default: resource plural)                                                                                                                                                                                            |
+| `--fields '<spec>'`               | New table: `name:type:required\|nullable\|default=<literal>, …` (types: text, integer, numeric, boolean, uuid, timestamp)                                                                                                                |
+| `--table <export>`                | Reuse an existing Drizzle table export (mutually exclusive with `--fields`)                                                                                                                                                              |
+| `--schema-file <path>`            | Where `--table` is exported (default: schema index)                                                                                                                                                                                      |
+| `--definition <path>`             | JSON resource definition for enums/relations/exposure/fixtures                                                                                                                                                                           |
+| `--route <path>`                  | Mount path (default `/api/v1/<module>`)                                                                                                                                                                                                  |
+| `--access public\|authenticated`  | Required. `authenticated` wraps every route in `requireAuth()`, emits an ability-checking policy (`<resource>.<ability>` token abilities, `*` for sessions) and generates 401/403 endpoint cases. Requires the auth module (`make:auth`) |
+| `--soft-delete`                   | Adds `deletedAt` + restore behavior and deletion tests                                                                                                                                                                                   |
+| `--verify`                        | Typecheck + run the endpoint suite on an isolated PostgreSQL database                                                                                                                                                                    |
+| `--test-mode in-process\|network` | Endpoint transport for verification (default in-process)                                                                                                                                                                                 |
+| `--dry-run`                       | Preview every file change and the test plan; write nothing                                                                                                                                                                               |
+| `--force`                         | Overwrite generator-owned files of this module only                                                                                                                                                                                      |
 
 ```sh
 bun run cli -- make:crud Category \
@@ -120,16 +120,16 @@ Delegates to the same `make:crud` pipeline with an explicit module name.
 the `make:crud` pipeline each, through the same renderers — output is
 byte-identical to a whole-module generation.
 
-| Option | Applies to | Effect |
-|---|---|---|
-| `--module <name>` | all slices | Destination module (default: resource plural) |
-| `--table <export>` | table-coupled slices | Drizzle table export (default: plural camel of the resource) |
-| `--schema-file <path>` | table-coupled slices | Where `--table` is exported (default: schema index) |
-| `--soft-delete` | `make:schema` | Table carries `deletedAt` (string mode) |
-| `--fields '<spec>'` / `--definition <path>` | `make:schema` | New-table fields, same grammar as `make:crud` |
-| `--kind create\|update\|list` | `make:request` | Which operation (default create) |
-| `--access public\|authenticated` | `make:policy` | Declared resource access (required; `authenticated` requires `make:auth`) |
-| `--dry-run` / `--force` | all | As in `make:crud` |
+| Option                                      | Applies to           | Effect                                                                    |
+| ------------------------------------------- | -------------------- | ------------------------------------------------------------------------- |
+| `--module <name>`                           | all slices           | Destination module (default: resource plural)                             |
+| `--table <export>`                          | table-coupled slices | Drizzle table export (default: plural camel of the resource)              |
+| `--schema-file <path>`                      | table-coupled slices | Where `--table` is exported (default: schema index)                       |
+| `--soft-delete`                             | `make:schema`        | Table carries `deletedAt` (string mode)                                   |
+| `--fields '<spec>'` / `--definition <path>` | `make:schema`        | New-table fields, same grammar as `make:crud`                             |
+| `--kind create\|update\|list`               | `make:request`       | Which operation (default create)                                          |
+| `--access public\|authenticated`            | `make:policy`        | Declared resource access (required; `authenticated` requires `make:auth`) |
+| `--dry-run` / `--force`                     | all                  | As in `make:crud`                                                         |
 
 Table-coupled slices introspect the Drizzle export and refuse with actionable
 hints when a sibling artifact they import is missing (`make:schema` starts a
@@ -156,11 +156,11 @@ workspace), provider registration, the kernel guard (`resolveActor:
 authActorResolver(application)`) and the `/api/v1/auth` route mount — all via
 explicit markers/anchors, previewable with `--dry-run`.
 
-| Option | Effect |
-|---|---|
+| Option            | Effect                                                                  |
+| ----------------- | ----------------------------------------------------------------------- |
 | `--guards <list>` | Enabled guards, comma separated: `session`, `api-token` (default: both) |
-| `--dry-run` | Preview file changes, install and migration plan; write nothing |
-| `--force` | Overwrite generator-owned files of the auth module only |
+| `--dry-run`       | Preview file changes, install and migration plan; write nothing         |
+| `--force`         | Overwrite generator-owned files of the auth module only                 |
 
 ```sh
 bun run cli -- make:auth
@@ -175,22 +175,22 @@ cookie (CSRF-protected); `POST /auth/tokens` issues a Bearer token
 
 ## Database
 
-| Command | Effect |
-|---|---|
-| `db:generate --name <name>` | Diff the schema with pinned Drizzle Kit (offline); review the SQL afterwards |
-| `db:migrate [--connection <name>]` | Apply pending migrations under a lock |
-| `db:status [--json]` | Applied/pending migration state |
-| `db:check` | Validate migration metadata |
+| Command                            | Effect                                                                       |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| `db:generate --name <name>`        | Diff the schema with pinned Drizzle Kit (offline); review the SQL afterwards |
+| `db:migrate [--connection <name>]` | Apply pending migrations under a lock                                        |
+| `db:status [--json]`               | Applied/pending migration state                                              |
+| `db:check`                         | Validate migration metadata                                                  |
 
 Migrations are never applied automatically on startup — applying them is an
 explicit release step.
 
 ## Queues
 
-| Command | Effect |
-|---|---|
+| Command                                           | Effect                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------- |
 | `queue:work [--queue <name>] [--concurrency <n>]` | Consume the queue in the foreground; SIGTERM/SIGINT drains gracefully |
-| `queue:status [--queue <name>] [--json]` | Job counts per state (waiting/active/completed/failed/delayed) |
+| `queue:status [--queue <name>] [--json]`          | Job counts per state (waiting/active/completed/failed/delayed)        |
 
 Both require a reachable Redis (`config redis.url`).
 
@@ -203,11 +203,11 @@ code 3 (`UNSUPPORTED_CAPABILITY`) when `cacheProvider`, `storageProvider` or
 `authProvider` is missing. Destructive operations additionally require
 `--confirm`; `--dry-run` writes nothing.
 
-| Command | Effect |
-|---|---|
+| Command                                                | Effect                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------ |
 | `cache:clear [--store <name>] [--dry-run] [--confirm]` | Delete every cached entry in the application namespace |
-| `session:prune [--dry-run] [--confirm]` | Remove expired sessions; `--dry-run` only counts them |
-| `storage:check` | Validate disk configuration (read-only) |
+| `session:prune [--dry-run] [--confirm]`                | Remove expired sessions; `--dry-run` only counts them  |
+| `storage:check`                                        | Validate disk configuration (read-only)                |
 
 `cache:clear` requires `@framework/cache` with `createCacheProvider(...)`
 registered. `--store` only accepts the provider's single default namespace.
@@ -233,13 +233,13 @@ With `--json` the per-disk rows come back as `{ disks: [...] }`.
 
 ## Workflows
 
-| Command | Effect |
-|---|---|
-| `workflow:list [--workflow <name>] [--status <s>] [--limit <n>] [--json]` | Paginated runs with workflow, status, correlation and start time |
-| `workflow:status <id-or-prefix> [--json]` | One run with its full node tree (pipeline/stage/action paths, attempts, errors) |
-| `workflow:retry <id-or-prefix> [--from <node path>]` | Re-run a failed/compensated run from its failure point |
-| `workflow:cancel <id-or-prefix>` | Cancel a pending, running or waiting run |
-| `workflow:prune [--days <n>]` | Delete terminal runs older than the retention window (default 7) |
+| Command                                                                   | Effect                                                                          |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `workflow:list [--workflow <name>] [--status <s>] [--limit <n>] [--json]` | Paginated runs with workflow, status, correlation and start time                |
+| `workflow:status <id-or-prefix> [--json]`                                 | One run with its full node tree (pipeline/stage/action paths, attempts, errors) |
+| `workflow:retry <id-or-prefix> [--from <node path>]`                      | Re-run a failed/compensated run from its failure point                          |
+| `workflow:cancel <id-or-prefix>`                                          | Cancel a pending, running or waiting run                                        |
+| `workflow:prune [--days <n>]`                                             | Delete terminal runs older than the retention window (default 7)                |
 
 `workflow:list`/`workflow:status`/`workflow:cancel`/`workflow:prune` need
 PostgreSQL (`config database.url`); `workflow:retry` additionally needs Redis
@@ -247,21 +247,21 @@ to re-enqueue.
 
 ## Scheduling
 
-| Command | Effect |
-|---|---|
-| `schedule:list [--json]` | Registered BullMQ timetables with their next due run |
-| `schedule:run <name>` / `schedule:test <name>` | Enqueue one fire immediately (the scheduler process resolves the target) |
-| `schedule:work [--concurrency <n>]` | Run the scheduler process: sync timetables, consume due fires from the dedicated `<queue>-schedules` queue |
+| Command                                        | Effect                                                                                                     |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `schedule:list [--json]`                       | Registered BullMQ timetables with their next due run                                                       |
+| `schedule:run <name>` / `schedule:test <name>` | Enqueue one fire immediately (the scheduler process resolves the target)                                   |
+| `schedule:work [--concurrency <n>]`            | Run the scheduler process: sync timetables, consume due fires from the dedicated `<queue>-schedules` queue |
 
 These require a reachable Redis (`config redis.url`). Fires dispatch mapped
 jobs or workflows, which run on the regular workers.
 
 ## OpenAPI
 
-| Command | Effect |
-|---|---|
-| `openapi:generate --output <path> [--api-version <v>]` | Emit the OpenAPI 3.1 document for documented operations |
-| `openapi:check` | Validate the document against the live route table (drift check) |
+| Command                                                | Effect                                                           |
+| ------------------------------------------------------ | ---------------------------------------------------------------- |
+| `openapi:generate --output <path> [--api-version <v>]` | Emit the OpenAPI 3.1 document for documented operations          |
+| `openapi:check`                                        | Validate the document against the live route table (drift check) |
 
 ## Application generators
 
@@ -271,15 +271,15 @@ conflicts unless `--force`, registries update through `// @framework:*`
 markers) and refuse up front when the generated code would import a package
 the app does not depend on.
 
-| Command | Writes | Notes |
-|---|---|---|
-| `make:mail <name>` | `app/mail/<name>.mail.ts` | Typed data → subject/text/HTML (interpolations HTML-escaped) and a `send<Name>Mail(mailer, to, data)` helper. Needs `@framework/mail` |
-| `make:notification <name> [--channels email,database,push,messaging]` | `app/notifications/<name>.notification.ts` | `defineNotification` with one builder per declared channel (default `email,database`). Needs `@framework/notifications` |
-| `make:command <name> [--signature group:name]` | `app/commands/<name>.command.ts` | Registered in `app/commands/index.ts` (created on first use) and appended to the catalog in `bin/cli.ts` (default signature `app:<name>`; existing names refused) |
-| `make:schedule <name> (--job <job> \| --workflow <name>) [--cron "<expr>"]` | `app/schedules/<name>.schedule.ts` | Registered under `@framework:schedules`; `--job` must exist (`make:job`); cron is validated as five fields (default hourly). Needs `@framework/scheduler` |
-| `make:guard <name> [--header x-api-key]` | `app/auth/guards/<name>.guard.ts` | `ActorResolver` reading one credential header; compose it in the kernel's `resolveActor` |
-| `make:user-provider <name>` | `app/auth/<name>.user-provider.ts` | `UserProvider` decorating `DatabaseUserProvider`; bind as `USER_PROVIDER`. Needs `@framework/auth` |
-| `make:migration <name>` | `database/migrations/NNNN_<name>.sql` + journal entry | Empty custom SQL migration via the pinned `drizzle-kit generate --custom` |
+| Command                                                                     | Writes                                                | Notes                                                                                                                                                             |
+| --------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make:mail <name>`                                                          | `app/mail/<name>.mail.ts`                             | Typed data → subject/text/HTML (interpolations HTML-escaped) and a `send<Name>Mail(mailer, to, data)` helper. Needs `@framework/mail`                             |
+| `make:notification <name> [--channels email,database,push,messaging]`       | `app/notifications/<name>.notification.ts`            | `defineNotification` with one builder per declared channel (default `email,database`). Needs `@framework/notifications`                                           |
+| `make:command <name> [--signature group:name]`                              | `app/commands/<name>.command.ts`                      | Registered in `app/commands/index.ts` (created on first use) and appended to the catalog in `bin/cli.ts` (default signature `app:<name>`; existing names refused) |
+| `make:schedule <name> (--job <job> \| --workflow <name>) [--cron "<expr>"]` | `app/schedules/<name>.schedule.ts`                    | Registered under `@framework:schedules`; `--job` must exist (`make:job`); cron is validated as five fields (default hourly). Needs `@framework/scheduler`         |
+| `make:guard <name> [--header x-api-key]`                                    | `app/auth/guards/<name>.guard.ts`                     | `ActorResolver` reading one credential header; compose it in the kernel's `resolveActor`                                                                          |
+| `make:user-provider <name>`                                                 | `app/auth/<name>.user-provider.ts`                    | `UserProvider` decorating `DatabaseUserProvider`; bind as `USER_PROVIDER`. Needs `@framework/auth`                                                                |
+| `make:migration <name>`                                                     | `database/migrations/NNNN_<name>.sql` + journal entry | Empty custom SQL migration via the pinned `drizzle-kit generate --custom`                                                                                         |
 
 ## Tooling (delegated)
 

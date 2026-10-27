@@ -11,17 +11,17 @@ the composed Hono kernel with `authActorResolver` and `defineAuthRoutes`.
 
 ## Result matrix
 
-| # | Flow | Result | What is actually asserted |
-|---|---|---|---|
-| F1 | Register | PASS | `201`; session cookie issued; the public user projection contains **no** `passwordHash` / `totpSecret` and the serialised body matches neither field |
-| F2 | Login | PASS | correct credentials → `200` + cookie; wrong password → `401`; a second login yields a **different** session token (rotation) |
-| F3 | Two-step TOTP | PASS | enroll → enable → login forks to `{ twoStep: true, challenge }`; wrong code → `401`; **replaying the same challenge with a now-correct code → `401`** (single-use); a fresh challenge completes and yields a working session |
-| F4 | Logout | PASS | `204`; the revoked cookie no longer authenticates (`/auth/me` → `401`) |
-| F5 | Me | PASS | session → `via: 'session'`; API token → `via: 'api-token'` with the token's **own** abilities (`['notes.read']`), not a wildcard |
-| F6 | Email verification | PASS | `email_verified_at` goes from `null` to set after `/email/verify`; replaying the delivered token is **not** accepted; an unknown token is not accepted |
-| F7 | Password reset | PASS | `/password/forgot` returns the **same status (202) for known and unknown** addresses (no enumeration oracle); after reset the old session **and** the old API token both stop authenticating (`401`), and the new password works |
-| F8 | API tokens | PASS | `201` with the plaintext `value` shown once; `GET /tokens` exposes neither the hash nor the plaintext; Bearer auth works; `DELETE` → `204`; the revoked token → `401`; a cross-user revoke → **`404`** (not `403`) |
-| F9 | JWT guard | Covered elsewhere | Deliberately **not** duplicated here — see below |
+| #   | Flow               | Result            | What is actually asserted                                                                                                                                                                                                        |
+| --- | ------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | Register           | PASS              | `201`; session cookie issued; the public user projection contains **no** `passwordHash` / `totpSecret` and the serialised body matches neither field                                                                             |
+| F2  | Login              | PASS              | correct credentials → `200` + cookie; wrong password → `401`; a second login yields a **different** session token (rotation)                                                                                                     |
+| F3  | Two-step TOTP      | PASS              | enroll → enable → login forks to `{ twoStep: true, challenge }`; wrong code → `401`; **replaying the same challenge with a now-correct code → `401`** (single-use); a fresh challenge completes and yields a working session     |
+| F4  | Logout             | PASS              | `204`; the revoked cookie no longer authenticates (`/auth/me` → `401`)                                                                                                                                                           |
+| F5  | Me                 | PASS              | session → `via: 'session'`; API token → `via: 'api-token'` with the token's **own** abilities (`['notes.read']`), not a wildcard                                                                                                 |
+| F6  | Email verification | PASS              | `email_verified_at` goes from `null` to set after `/email/verify`; replaying the delivered token is **not** accepted; an unknown token is not accepted                                                                           |
+| F7  | Password reset     | PASS              | `/password/forgot` returns the **same status (202) for known and unknown** addresses (no enumeration oracle); after reset the old session **and** the old API token both stop authenticating (`401`), and the new password works |
+| F8  | API tokens         | PASS              | `201` with the plaintext `value` shown once; `GET /tokens` exposes neither the hash nor the plaintext; Bearer auth works; `DELETE` → `204`; the revoked token → `401`; a cross-user revoke → **`404`** (not `403`)               |
+| F9  | JWT guard          | Covered elsewhere | Deliberately **not** duplicated here — see below                                                                                                                                                                                 |
 
 ---
 
@@ -40,7 +40,7 @@ reasoning about session fixation should know:
 
 - Session **rotation** on login: **yes** (new token each login).
 - Session **invalidation of other sessions on login**: **no**.
-- **All** sessions *are* invalidated on password reset (F7 proves this).
+- **All** sessions _are_ invalidated on password reset (F7 proves this).
 
 If single-session-per-account is ever required, it needs an explicit policy — it is not the
 current default.

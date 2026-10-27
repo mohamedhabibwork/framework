@@ -2,19 +2,19 @@
 
 ## Compatibility matrix
 
-| Component | Pinned version | Notes |
-|---|---|---|
-| Bun | 1.4.2 | Only validated runtime |
-| TypeScript | 7.0.2 | `tsc` type checking only (`noEmit`) |
-| Hono | 4.13.13 | |
-| @hono/zod-validator | 0.9.1 | peer: zod ^4, hono ≥4.11.2 |
-| zod | 4.6.5 | `z.toJSONSchema` used for OpenAPI |
-| drizzle-orm | 0.45.4 | latest stable (1.0 is RC; not adopted) |
-| drizzle-kit | 0.31.11 | migration generation/check only |
-| drizzle-zod | 0.8.3 | standalone package behind `@framework/database` adapter |
-| postgres (postgres-js) | 3.4.9 | |
-| PostgreSQL | 17 (alpine image) | `deployment/compose.yaml`, port 54329 on loopback |
-| Biome | 2.5.15 | lint + format |
+| Component              | Pinned version    | Notes                                                   |
+| ---------------------- | ----------------- | ------------------------------------------------------- |
+| Bun                    | 1.4.2             | Only validated runtime                                  |
+| TypeScript             | 7.0.2             | `tsc` type checking only (`noEmit`)                     |
+| Hono                   | 4.13.13           |                                                         |
+| @hono/zod-validator    | 0.9.1             | peer: zod ^4, hono ≥4.11.2                              |
+| zod                    | 4.6.5             | `z.toJSONSchema` used for OpenAPI                       |
+| drizzle-orm            | 0.45.4            | latest stable (1.0 is RC; not adopted)                  |
+| drizzle-kit            | 0.31.11           | migration generation/check only                         |
+| drizzle-zod            | 0.8.3             | standalone package behind `@framework/database` adapter |
+| postgres (postgres-js) | 3.4.9             |                                                         |
+| PostgreSQL             | 17 (alpine image) | `deployment/compose.yaml`, port 54329 on loopback       |
+| Biome                  | 2.5.15            | lint + format                                           |
 
 ## Decisions
 
@@ -48,7 +48,7 @@
 
 **ADR-18 Driver-based search with a memory + Postgres driver.** Laravel Scout's equivalent is `@framework/search`: `SearchEngine` is a port; the `memory` (dev/tests) and `postgres` (tsvector + GIN, `ts_rank`) drivers ship first. External backends (Meilisearch, Typesense) are **documented optional-peer adapter seams kept external in `bun build`** — named and bounded, not implemented in this cut. Indexing is **queued by default** over `@framework/queue`, wired from the existing `EventBus` (`<channel>.created|updated|deleted|restored`) — no new bus or worker; `indexing: 'inline'` is available for dev/tests. Soft-delete awareness is mandatory (a delete removes from the index; a restore re-adds). Capabilities are reported honestly (`CAPABILITY_UNSUPPORTED`, never faked).
 
-**ADR-19 Outbound social login distinct from the inbound JWT/JWK guard.** Laravel Socialite's equivalent is `@framework/socialite` (Google + GitHub drivers over native `fetch`, with `jose` verifying OIDC `id_token`). This is **outbound** provider integration: the `jwt` guard performs **inbound** verification of tokens presented *to* the API, whereas Socialite obtains tokens *from* third parties and always terminates in a **framework session/API token** (`AuthService.startSession`) — a provider token is never accepted as a framework credential. `state` + PKCE guard the redirect/callback; account linking to local users is explicit configuration (`linkByEmail`, verified-email required), never a silent merge. No second identity store.
+**ADR-19 Outbound social login distinct from the inbound JWT/JWK guard.** Laravel Socialite's equivalent is `@framework/socialite` (Google + GitHub drivers over native `fetch`, with `jose` verifying OIDC `id_token`). This is **outbound** provider integration: the `jwt` guard performs **inbound** verification of tokens presented _to_ the API, whereas Socialite obtains tokens _from_ third parties and always terminates in a **framework session/API token** (`AuthService.startSession`) — a provider token is never accepted as a framework credential. `state` + PKCE guard the redirect/callback; account linking to local users is explicit configuration (`linkByEmail`, verified-email required), never a silent merge. No second identity store.
 
 **ADR-20 Observatory is a dev observability dashboard, not a tracing pipeline.** Laravel Telescope's equivalent is `@framework/observatory`: in-app, per-request, dev-time inspection with watchers (request, query, job, event, exception, mail, cache) and a local store (memory for dev + Postgres). It is **not** the planned OpenTelemetry tracing/metrics/OTLP work (M7) and does not duplicate it — it reuses the same instrumentation seams (a query observer, the kernel `report` hook) but owns no exporter. Retention/pruning is explicit (`observatory:prune` + schedule). Dashboard routes are **never public by default** (ADR-8): disabled outside dev/test unless `observatory.enabled` is explicitly true and always mounted behind an authorization guard. UI is server-rendered `hono/jsx` + a JSON API (no frontend build).
 

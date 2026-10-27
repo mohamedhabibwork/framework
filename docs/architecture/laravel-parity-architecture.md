@@ -14,36 +14,36 @@
 
 #### 1.1 Core technical challenges
 
-| # | Challenge | Why it is hard | Approach |
-|---|---|---|---|
-| C1 | **Feature Builder** (entirely net-new, highest risk) | Must resolve a feature→provider/config/route/command/artifact graph, fail *early and by name*, and make **removal mechanical and verifiable** — for both workspace (`workspace:*`) and published-npm consumption | A **Registry + Resolver + Plan** triple in a new `@framework/features` package. Declarations are data (`FeatureDescriptor`), resolution is a pure function producing a `FeaturePlan`, and verification is a separate tool that asserts the plan's exclusions mechanically (§1.3). |
-| C2 | **Kit→core wiring** (D3) without coupling core to 5 external packages | `@framework/core` must be *aware* of kits but must not depend on them; kits must stay swappable (ADR-11) and honest about capabilities | A thin **`@framework/kits`** abstraction: `@framework/core` depends on the abstraction only; each kit is bound behind a stable **port**; concrete kit adapters live in the subsystem packages that already own them (`@framework/cache`, `-storage`, `-queue`, `-logging`, `-notifications`). |
-| C3 | **One-line CRUD** at *runtime*, not just in a shell | The CLI path exists; the brief (P0-2, §4a #10) demands a programmatic `defineResource(table).crud()` producing the same 5 routes with the same contracts | A fluent **`ResourceBuilder`** in `@framework/crud` that reuses `ResourceService`/`ResourceController`/`resourceOperations` — no second CRUD implementation. |
-| C4 | **Generator depth** (relations, enums, jsonb, composite keys, `--owned-by`) | Must introspect Drizzle schema, resolve FKs, derive Zod, and refuse rather than guess | Extend the existing `packages/cli/src/generators/crud/*` pipeline (`introspect.ts`, `definition.ts`, `templates-*.ts`); new mixins for relation loading and composite keys. |
-| C5 | **Full customization** with a *measurable* gate | "Every component is replaceable" is unverifiable unless each subsystem has a contract + default binding + an override test | Per-subsystem **contract + default binding + one override test**; the audit is a task (T18), not a claim. |
-| C6 | **Honest tree-shaking** | A runtime `if (enabled)` guard is *not* removal (brief §4b #9) | Removal = package-dependency removal + build-time exclusion (+ optional source pruning), proven by a dependency-graph assertion + `bun install --frozen-lockfile` (brief §4b #4). |
-| C7 | **SOLID + patterns auditable** | The user requires it "throughout"; assertions are worthless | A per-subsystem pattern table (§1.6) mapping each subsystem to the concrete SOLID principle / pattern already in the code, with the new work extending—not replacing—those patterns. |
+| #   | Challenge                                                                   | Why it is hard                                                                                                                                                                                                   | Approach                                                                                                                                                                                                                                                                                      |
+| --- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | **Feature Builder** (entirely net-new, highest risk)                        | Must resolve a feature→provider/config/route/command/artifact graph, fail _early and by name_, and make **removal mechanical and verifiable** — for both workspace (`workspace:*`) and published-npm consumption | A **Registry + Resolver + Plan** triple in a new `@framework/features` package. Declarations are data (`FeatureDescriptor`), resolution is a pure function producing a `FeaturePlan`, and verification is a separate tool that asserts the plan's exclusions mechanically (§1.3).             |
+| C2  | **Kit→core wiring** (D3) without coupling core to 5 external packages       | `@framework/core` must be _aware_ of kits but must not depend on them; kits must stay swappable (ADR-11) and honest about capabilities                                                                           | A thin **`@framework/kits`** abstraction: `@framework/core` depends on the abstraction only; each kit is bound behind a stable **port**; concrete kit adapters live in the subsystem packages that already own them (`@framework/cache`, `-storage`, `-queue`, `-logging`, `-notifications`). |
+| C3  | **One-line CRUD** at _runtime_, not just in a shell                         | The CLI path exists; the brief (P0-2, §4a #10) demands a programmatic `defineResource(table).crud()` producing the same 5 routes with the same contracts                                                         | A fluent **`ResourceBuilder`** in `@framework/crud` that reuses `ResourceService`/`ResourceController`/`resourceOperations` — no second CRUD implementation.                                                                                                                                  |
+| C4  | **Generator depth** (relations, enums, jsonb, composite keys, `--owned-by`) | Must introspect Drizzle schema, resolve FKs, derive Zod, and refuse rather than guess                                                                                                                            | Extend the existing `packages/cli/src/generators/crud/*` pipeline (`introspect.ts`, `definition.ts`, `templates-*.ts`); new mixins for relation loading and composite keys.                                                                                                                   |
+| C5  | **Full customization** with a _measurable_ gate                             | "Every component is replaceable" is unverifiable unless each subsystem has a contract + default binding + an override test                                                                                       | Per-subsystem **contract + default binding + one override test**; the audit is a task (T18), not a claim.                                                                                                                                                                                     |
+| C6  | **Honest tree-shaking**                                                     | A runtime `if (enabled)` guard is _not_ removal (brief §4b #9)                                                                                                                                                   | Removal = package-dependency removal + build-time exclusion (+ optional source pruning), proven by a dependency-graph assertion + `bun install --frozen-lockfile` (brief §4b #4).                                                                                                             |
+| C7  | **SOLID + patterns auditable**                                              | The user requires it "throughout"; assertions are worthless                                                                                                                                                      | A per-subsystem pattern table (§1.6) mapping each subsystem to the concrete SOLID principle / pattern already in the code, with the new work extending—not replacing—those patterns.                                                                                                          |
 
 #### 1.2 Framework & library selections (justification)
 
 The stack is **already pinned and validated**; the plan adds the minimum to close gaps. No new runtime, no new ORM, no second query engine.
 
-| Concern | Choice | Justification |
-|---|---|---|
-| Runtime | **Bun 1.4.2** (primary, ADR-1) | Already the only validated runtime; tests, server, worker, CLI all run on Bun. |
-| Runtime (secondary) | **Node** via an explicit adapter (P1, T20) | Brief Q7 assumption: supported but secondary; new adapter + test matrix, no default flip. |
-| HTTP | **Hono 4.13.12** (native) | Preserve native `Context`/`next()`/`onError` (invariant). No wrapper. |
-| Validation | **Zod 4.6.5** + `@hono/zod-validator 0.9.1` | `z.toJSONSchema` powers OpenAPI 3.1. |
-| Persistence | **Drizzle ORM 0.45.3** + drizzle-kit 0.31.11 + drizzle-zod 0.8.3 (behind adapter, ADR-3) | ORM is out of scope; Drizzle is the query engine. Thin model metadata only. |
-| Feature Builder | **Net-new `@framework/features`** (no external dep) | Zero-dependency resolver keeps it tree-shakeable and publishable. |
-| Kit abstraction | **Net-new `@framework/kits`** (no external dep) | Pure types + a registry; must be safe for `@framework/core` to depend on. |
-| SMTP (P0-5) | **`nodemailer`** (peer, optional) | Battle-tested, Bun-compatible; loaded behind `MailTransport` adapter so the peer stays optional (matches the "optional peer SDK" build rule). |
-| SMS (P0-4) | **`@mohamedhabibwork/notifykit`** SMS channel | Never reimplement (ADR-11); surface the channel through NotifyKit. |
-| Cloud disk (P0-4) | **`@mohamedhabibwork/storagekit`** s3 driver + MinIO in compose | Validate one cloud disk against real infra (brief §4d #4). |
-| Crypt (P1-2) | **`node:crypto`** AES-256-GCM | No dependency; mirrors the existing `node:crypto` TOTP usage. |
-| Outbound HTTP (P1-4) | **native `fetch`** + retry helper | Already available on Bun/Node; no dependency. |
-| Localization (P1-3) | native + Hono `language` middleware | Spec §11 already names Hono's `language`; catalog format is framework-owned. |
-| Gate (P1-1) | native | Closure-based abilities over the existing `hasAbility`/policy plumbing. |
+| Concern              | Choice                                                                                   | Justification                                                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime              | **Bun 1.4.2** (primary, ADR-1)                                                           | Already the only validated runtime; tests, server, worker, CLI all run on Bun.                                                                |
+| Runtime (secondary)  | **Node** via an explicit adapter (P1, T20)                                               | Brief Q7 assumption: supported but secondary; new adapter + test matrix, no default flip.                                                     |
+| HTTP                 | **Hono 4.13.12** (native)                                                                | Preserve native `Context`/`next()`/`onError` (invariant). No wrapper.                                                                         |
+| Validation           | **Zod 4.6.5** + `@hono/zod-validator 0.9.1`                                              | `z.toJSONSchema` powers OpenAPI 3.1.                                                                                                          |
+| Persistence          | **Drizzle ORM 0.45.3** + drizzle-kit 0.31.11 + drizzle-zod 0.8.3 (behind adapter, ADR-3) | ORM is out of scope; Drizzle is the query engine. Thin model metadata only.                                                                   |
+| Feature Builder      | **Net-new `@framework/features`** (no external dep)                                      | Zero-dependency resolver keeps it tree-shakeable and publishable.                                                                             |
+| Kit abstraction      | **Net-new `@framework/kits`** (no external dep)                                          | Pure types + a registry; must be safe for `@framework/core` to depend on.                                                                     |
+| SMTP (P0-5)          | **`nodemailer`** (peer, optional)                                                        | Battle-tested, Bun-compatible; loaded behind `MailTransport` adapter so the peer stays optional (matches the "optional peer SDK" build rule). |
+| SMS (P0-4)           | **`@mohamedhabibwork/notifykit`** SMS channel                                            | Never reimplement (ADR-11); surface the channel through NotifyKit.                                                                            |
+| Cloud disk (P0-4)    | **`@mohamedhabibwork/storagekit`** s3 driver + MinIO in compose                          | Validate one cloud disk against real infra (brief §4d #4).                                                                                    |
+| Crypt (P1-2)         | **`node:crypto`** AES-256-GCM                                                            | No dependency; mirrors the existing `node:crypto` TOTP usage.                                                                                 |
+| Outbound HTTP (P1-4) | **native `fetch`** + retry helper                                                        | Already available on Bun/Node; no dependency.                                                                                                 |
+| Localization (P1-3)  | native + Hono `language` middleware                                                      | Spec §11 already names Hono's `language`; catalog format is framework-owned.                                                                  |
+| Gate (P1-1)          | native                                                                                   | Closure-based abilities over the existing `hasAbility`/policy plumbing.                                                                       |
 
 #### 1.3 Architecture patterns (the Feature Builder in depth)
 
@@ -55,9 +55,24 @@ The stack is **already pinned and validated**; the plan adds the minimum to clos
 // bootstrap/features.ts  (generated by `create`; the ONE declaration point)
 import { defineFeatures } from '@framework/features';
 export const features = defineFeatures([
-  'http', 'validation', 'database', 'auth', 'cache', 'queue', 'events',
-  'scheduler', 'workflow', 'storage', 'mail', 'notifications', 'logging',
-  'openapi', 'testing', 'cli', 'realtime', 'ai-mcp',
+  'http',
+  'validation',
+  'database',
+  'auth',
+  'cache',
+  'queue',
+  'events',
+  'scheduler',
+  'workflow',
+  'storage',
+  'mail',
+  'notifications',
+  'logging',
+  'openapi',
+  'testing',
+  'cli',
+  'realtime',
+  'ai-mcp',
 ]);
 ```
 
@@ -66,30 +81,30 @@ export const features = defineFeatures([
 ```ts
 interface FeatureDescriptor {
   readonly name: FeatureName;
-  readonly requires: readonly FeatureName[];        // prerequisite graph
-  readonly providers: readonly ProviderFactory[];   // e.g. createCacheProvider
-  readonly configSection?: ConfigSectionRef;        // zod fragment + key
-  readonly routes?: readonly RouteFamilyRef[];      // e.g. '/api/v1/auth'
-  readonly commands?: readonly string[];            // CLI names it owns
+  readonly requires: readonly FeatureName[]; // prerequisite graph
+  readonly providers: readonly ProviderFactory[]; // e.g. createCacheProvider
+  readonly configSection?: ConfigSectionRef; // zod fragment + key
+  readonly routes?: readonly RouteFamilyRef[]; // e.g. '/api/v1/auth'
+  readonly commands?: readonly string[]; // CLI names it owns
   readonly packages: readonly PackageRequirement[]; // @framework/* + kit deps
-  readonly artifacts?: readonly string[];           // generator markers it feeds
+  readonly artifacts?: readonly string[]; // generator markers it feeds
   readonly tier: 'core' | 'p0' | 'p1' | 'p2';
 }
 ```
 
-**(3) Resolver** — pure, total, and *fail-fast*:
+**(3) Resolver** — pure, total, and _fail-fast_:
 
 - `validate()` at registry build: **unknown feature ⇒ parse-time error** (`UNKNOWN_FEATURE`) — brief §4b #5.
 - `resolve(enabled)`: topologically sorts by `requires`; **a missing prerequisite throws `MISSING_PREREQUISITE` at bootstrap with the exact feature name** — never a runtime crash (brief §4b #5). Cycles throw `FEATURE_CYCLE`.
 - Produces a **`FeaturePlan`**: `{ enabled, order, excluded, providers, packages, excludedPackages, commands, routeFamilies }`. `isFullProfile()` is true when every catalog feature is enabled — the **full profile reproduces today's `create` output exactly** (brief §4b #8, assumption A3).
-- **Compatibility matrix declared in code** (brief §4b #6): `queue → core`, `workflow → database + queue`, `notifications → mail (email channel) | standalone`, `scheduler → queue`, `auth → database`, etc. The matrix *is* the `requires` graph; it is documented by `feature:list`.
+- **Compatibility matrix declared in code** (brief §4b #6): `queue → core`, `workflow → database + queue`, `notifications → mail (email channel) | standalone`, `scheduler → queue`, `auth → database`, etc. The matrix _is_ the `requires` graph; it is documented by `feature:list`.
 
 **(4) Removal — D1 honored, both modes selectable:**
 
-| Mode | What it does | Default? |
-|---|---|---|
+| Mode                                               | What it does                                                                                                                                      | Default?   |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | **Default (dependency removal + build exclusion)** | Remove the subsystem's `@framework/*` (+ kit) entry from `package.json`, update the lockfile, exclude it from the build. **Sources stay intact.** | ✅ default |
-| **`--prune-sources` (opt-in)** | Additionally prune the subsystem's *framework-owned* source files (never user code). | opt-in |
+| **`--prune-sources` (opt-in)**                     | Additionally prune the subsystem's _framework-owned_ source files (never user code).                                                              | opt-in     |
 
 Both modes satisfy the **same mechanical invariants** (brief §4b #4). Removal is non-destructive to user code (brief §4b #7): a generated module that referenced a removed feature fails at **compile time** pointing at the removed feature (the import of `@framework/x` no longer resolves), never silent breakage.
 
@@ -110,24 +125,29 @@ All mutation commands honor `--dry-run` (writes nothing) and the `{command,statu
 ```jsonc
 {
   "command": "feature:check",
-  "status": "ok",                         // "ok" | "error"
+  "status": "ok", // "ok" | "error"
   "data": {
     "ok": true,
-    "features": { "enabled": ["http","validation","database"], "excluded": ["queue","cache"], "order": ["http","validation","database"] },
+    "features": {
+      "enabled": ["http", "validation", "database"],
+      "excluded": ["queue", "cache"],
+      "order": ["http", "validation", "database"],
+    },
     "invariants": [
-      { "id": "typecheck",        "ok": true, "detail": "tsc --noEmit clean" },
-      { "id": "build",            "ok": true, "detail": "bun build ok" },
-      { "id": "boot",             "ok": true, "detail": "application booted" },
-      { "id": "suite",            "ok": true, "detail": "N tests passed" },
+      { "id": "typecheck", "ok": true, "detail": "tsc --noEmit clean" },
+      { "id": "build", "ok": true, "detail": "bun build ok" },
+      { "id": "boot", "ok": true, "detail": "application booted" },
+      { "id": "suite", "ok": true, "detail": "N tests passed" },
       { "id": "excluded-imports", "ok": true, "detail": "0 imports of 2 excluded @framework/* packages" },
-      { "id": "frozen-lockfile",  "ok": true, "detail": "bun install --frozen-lockfile clean" }
-    ]
+      { "id": "frozen-lockfile", "ok": true, "detail": "bun install --frozen-lockfile clean" },
+    ],
   },
-  "warnings": []
+  "warnings": [],
 }
 ```
 
 > **FROZEN CONTRACT — locked by the T05 test.** Two fields are load-bearing; renaming either requires updating the T05 test AND every doc that quotes them (this section is the single source of truth):
+>
 > - `data.invariants[].id` — the **six-value enum** `typecheck | build | boot | suite | excluded-imports | frozen-lockfile`. Docs must document exactly this set (anti-drift: a renamed ID must break the build, not silently rot the doc).
 > - `data.features.excluded` — the "remove a feature" walkthrough quotes this array verbatim.
 >
@@ -148,9 +168,9 @@ The verification runs the brief's 3-feature fixture app (`features: ['http','val
 
 - **`@framework/kits`** defines five narrow **ports** (ISP): `CachePort`, `StoragePort`, `QueueTransportPort`, `LoggerPort`, `NotificationPort`; a **`KitAdapter`** shape (`kit`, `version`, `port`, `capabilities`, `create`); a **`KitRegistry`**; and a **`KitCapabilities`** report.
 - **`@framework/core` depends on `@framework/kits`** (and nothing else new). Core binds a `KIT_REGISTRY` token.
-- Each subsystem package (`@framework/cache`, `-storage`, `-queue`, `-logging`, `-notifications`) registers its **concrete kit adapter** at provider `register` time. The `@mohamedhabibwork/*` import stays *inside that adapter* (ADR-11 preserved — a kit bump is a one-file change, proven by a test that swaps the adapter, brief §4d #6).
+- Each subsystem package (`@framework/cache`, `-storage`, `-queue`, `-logging`, `-notifications`) registers its **concrete kit adapter** at provider `register` time. The `@mohamedhabibwork/*` import stays _inside that adapter_ (ADR-11 preserved — a kit bump is a one-file change, proven by a test that swaps the adapter, brief §4d #6).
 - Application code resolves the **subsystem contract** from the container by token — never the kit (brief §4d #2).
-- **Capability gaps are surfaced, never reimplemented** (ADR-11, brief §4d #3): `capabilities().assert(op)` throws a catalogued `CAPABILITY_UNSUPPORTED` with the kit name + version. The known gaps (cachekit Redis tags/namespace-clear, queuekit 0.4.1 inspection, storagekit cloud drivers, notifykit SMS) are closed in T15/T16/T17 **through the kits**, or kept as a *documented direct path* — never a silent second implementation.
+- **Capability gaps are surfaced, never reimplemented** (ADR-11, brief §4d #3): `capabilities().assert(op)` throws a catalogued `CAPABILITY_UNSUPPORTED` with the kit name + version. The known gaps (cachekit Redis tags/namespace-clear, queuekit 0.4.1 inspection, storagekit cloud drivers, notifykit SMS) are closed in T15/T16/T17 **through the kits**, or kept as a _documented direct path_ — never a silent second implementation.
 
 #### 1.5 One-line CRUD & full customization
 
@@ -160,21 +180,21 @@ The verification runs the brief's 3-feature fixture app (`features: ['http','val
 
 #### 1.6 SOLID + design-pattern mapping (auditable, per subsystem)
 
-| Subsystem | SRP | OCP | LSP | ISP | DIP | Patterns | New work |
-|---|---|---|---|---|---|---|---|
-| core (container/providers) | container vs scope vs providers | deferred providers | Resolver impls | `Resolver` narrow | providers bind contracts | Registry, Factory, Template Method (lifecycle) | depend on `@framework/kits` |
-| features (**new**) | registry / resolver / catalog / plan separated | add feature = add descriptor | — | `FeatureDescriptor` is data | resolver depends on catalog abstraction | **Builder, Registry, Resolver, Strategy** | entire package |
-| kits (**new**) | port / adapter / registry separated | new kit = new adapter | all kits satisfy port | 5 narrow ports | core→abstraction, subsystem→kit | **Ports & Adapters, Registry, Strategy** | entire package |
-| http | kernel vs routing vs errors | native middleware unchanged | — | `ActorResolver`, limiter | middleware via DI | Middleware/Decorator, Template Method | feature routes wiring |
-| crud | service vs controller vs transform | mixins extend ops | repository structural | `CrudRepository`, `ResourceTransform` | service→repo contract | **Template Method, Builder, Strategy** | `defineResource`, relations, transform, filter/sort |
-| database | connections vs transactions vs mixins | new op = new mixin | all repos satisfy `CrudRepository` | narrow mixins | DataContext seam | **Mixin (OCP), Factory, Adapter (ADR-3)** | composite-key + relation mixins |
-| auth | guards vs providers vs policies vs gate | new guard = new Strategy | guards satisfy contract | `UserProvider`, `Guard` | policies via DI | **Strategy, Factory** | **Gate registry** |
-| cache/queue/storage/logging/notifications | manager vs adapter | new engine = new adapter | all satisfy port | capability-scoped ops | manager→port | **Adapter, Strategy, Registry** | kit-gap closure via ports |
-| mail | builder vs transport | new transport = new Strategy | transports satisfy `MailTransport` | `MailTransport` | Mailer→transport | **Builder, Strategy, Factory** | SMTP transport |
-| support | helpers separated | — | — | — | — | Facade-like helpers | Crypt, localization, `Collection`/`Str`/`Arr` |
-| openapi | metadata vs generation | new op = new metadata | — | — | — | Registry | operations for new resources |
-| cli | parser vs registry vs generators | new cmd = new `Command` | all commands satisfy `Command` | `Command` | project adapter | **Command, Registry, Builder (plan)** | `feature:*`, generator depth, remaining generators |
-| workflow | workflow→pipeline→stage→action | new action = new unit | actions satisfy contract | narrow action contract | engine→store | **Saga/Compensation, Template Method** | (reuse for removal rollback if needed) |
+| Subsystem                                 | SRP                                            | OCP                          | LSP                                | ISP                                   | DIP                                     | Patterns                                       | New work                                            |
+| ----------------------------------------- | ---------------------------------------------- | ---------------------------- | ---------------------------------- | ------------------------------------- | --------------------------------------- | ---------------------------------------------- | --------------------------------------------------- |
+| core (container/providers)                | container vs scope vs providers                | deferred providers           | Resolver impls                     | `Resolver` narrow                     | providers bind contracts                | Registry, Factory, Template Method (lifecycle) | depend on `@framework/kits`                         |
+| features (**new**)                        | registry / resolver / catalog / plan separated | add feature = add descriptor | —                                  | `FeatureDescriptor` is data           | resolver depends on catalog abstraction | **Builder, Registry, Resolver, Strategy**      | entire package                                      |
+| kits (**new**)                            | port / adapter / registry separated            | new kit = new adapter        | all kits satisfy port              | 5 narrow ports                        | core→abstraction, subsystem→kit         | **Ports & Adapters, Registry, Strategy**       | entire package                                      |
+| http                                      | kernel vs routing vs errors                    | native middleware unchanged  | —                                  | `ActorResolver`, limiter              | middleware via DI                       | Middleware/Decorator, Template Method          | feature routes wiring                               |
+| crud                                      | service vs controller vs transform             | mixins extend ops            | repository structural              | `CrudRepository`, `ResourceTransform` | service→repo contract                   | **Template Method, Builder, Strategy**         | `defineResource`, relations, transform, filter/sort |
+| database                                  | connections vs transactions vs mixins          | new op = new mixin           | all repos satisfy `CrudRepository` | narrow mixins                         | DataContext seam                        | **Mixin (OCP), Factory, Adapter (ADR-3)**      | composite-key + relation mixins                     |
+| auth                                      | guards vs providers vs policies vs gate        | new guard = new Strategy     | guards satisfy contract            | `UserProvider`, `Guard`               | policies via DI                         | **Strategy, Factory**                          | **Gate registry**                                   |
+| cache/queue/storage/logging/notifications | manager vs adapter                             | new engine = new adapter     | all satisfy port                   | capability-scoped ops                 | manager→port                            | **Adapter, Strategy, Registry**                | kit-gap closure via ports                           |
+| mail                                      | builder vs transport                           | new transport = new Strategy | transports satisfy `MailTransport` | `MailTransport`                       | Mailer→transport                        | **Builder, Strategy, Factory**                 | SMTP transport                                      |
+| support                                   | helpers separated                              | —                            | —                                  | —                                     | —                                       | Facade-like helpers                            | Crypt, localization, `Collection`/`Str`/`Arr`       |
+| openapi                                   | metadata vs generation                         | new op = new metadata        | —                                  | —                                     | —                                       | Registry                                       | operations for new resources                        |
+| cli                                       | parser vs registry vs generators               | new cmd = new `Command`      | all commands satisfy `Command`     | `Command`                             | project adapter                         | **Command, Registry, Builder (plan)**          | `feature:*`, generator depth, remaining generators  |
+| workflow                                  | workflow→pipeline→stage→action                 | new action = new unit        | actions satisfy contract           | narrow action contract                | engine→store                            | **Saga/Compensation, Template Method**         | (reuse for removal rollback if needed)              |
 
 #### 1.7 Invariants that must survive (from brief §7)
 
@@ -193,6 +213,7 @@ The verification runs the brief's 3-feature fixture app (`features: ['http','val
 #### 2.1 Net-new files
 
 **Feature Builder** — `packages/features/`
+
 ```
 packages/features/package.json
 packages/features/tsconfig.json
@@ -209,6 +230,7 @@ packages/features/tests/catalog.test.ts
 ```
 
 **Kit abstraction** — `packages/kits/`
+
 ```
 packages/kits/package.json
 packages/kits/tsconfig.json
@@ -223,6 +245,7 @@ packages/kits/tests/registry.test.ts
 ```
 
 **Feature CLI** — `packages/cli/src/`
+
 ```
 packages/cli/src/commands/feature.ts      # feature:list|add|remove|check commands
 packages/cli/src/features/manifest.ts     # package.json + lockfile editing (workspace:* and npm)
@@ -234,6 +257,7 @@ packages/cli/tests/features.test.ts
 ```
 
 **One-line CRUD + depth** — `packages/crud/src/`
+
 ```
 packages/crud/src/resource.ts             # defineResource() + ResourceBuilder
 packages/crud/src/register-resource.ts    # registerResource(http, registration) mounts native routes
@@ -245,6 +269,7 @@ packages/crud/tests/relations.test.ts
 packages/crud/tests/transform.test.ts
 packages/crud/tests/filter-sort.test.ts
 ```
+
 ```
 packages/cli/src/generators/crud/relations.ts     # FK introspection → belongsTo/hasMany metadata
 packages/cli/src/generators/crud/enums.ts         # pgEnum → z.enum, jsonb → schema
@@ -253,6 +278,7 @@ packages/cli/src/generators/crud/ownership.ts     # --owned-by flag wiring
 ```
 
 **New subsystems / closures**
+
 ```
 packages/auth/src/gate.ts                 # Gate registry (define/before/after/allows/denies)   [P1-1]
 packages/support/src/crypt.ts             # Crypt AES-256-GCM encrypt/decrypt (+ rotate)         [P1-2]
@@ -269,6 +295,7 @@ packages/cache/src/touch.ts               # Cache::touch (extends TTL)          
 ```
 
 **Node runtime adapter (P1)** — `packages/core/src/`
+
 ```
 packages/core/src/runtime/runtime-adapter.ts   # RuntimeAdapter contract (server/worker/serve)
 packages/core/src/runtime/bun-adapter.ts        # existing Bun behaviour behind the contract
@@ -277,6 +304,7 @@ packages/cli/templates/application/runtimes/node/  # node template tree
 ```
 
 **P2 v13 additions (opt-in, catalogued P2)**
+
 ```
 packages/crud/src/json-api.ts             # JSON:API resources                          [P2-1]
 packages/auth/src/passkey.ts              # passkey / WebAuthn additive guard           [P2-2]
@@ -284,6 +312,7 @@ packages/ai/src/index.ts                  # AI SDK / agents / semantic search   
 ```
 
 **Docs & fixtures**
+
 ```
 docs/architecture/laravel-concept-map.md          # Laravel concept → framework equivalent
 apps/docs/src/content/docs/guides/laravel-mapping.mdx
@@ -329,11 +358,29 @@ Full diagram: `docs/architecture/class-diagram.mermaid` (Feature Builder registr
 
 ```ts
 // @framework/features
-type FeatureName = 'http'|'validation'|'database'|'auth'|'cache'|'queue'|'events'
-  |'scheduler'|'workflow'|'storage'|'mail'|'notifications'|'logging'
-  |'openapi'|'testing'|'cli'|'realtime'|'ai-mcp';
+type FeatureName =
+  | 'http'
+  | 'validation'
+  | 'database'
+  | 'auth'
+  | 'cache'
+  | 'queue'
+  | 'events'
+  | 'scheduler'
+  | 'workflow'
+  | 'storage'
+  | 'mail'
+  | 'notifications'
+  | 'logging'
+  | 'openapi'
+  | 'testing'
+  | 'cli'
+  | 'realtime'
+  | 'ai-mcp';
 
-interface FeatureDescriptor { /* see §1.3(2) */ }
+interface FeatureDescriptor {
+  /* see §1.3(2) */
+}
 interface FeaturePlan {
   readonly enabled: readonly FeatureName[];
   readonly order: readonly FeatureName[];
@@ -345,8 +392,13 @@ interface FeaturePlan {
   readonly routeFamilies: readonly string[];
 }
 declare function defineFeatures(names: readonly FeatureName[]): readonly FeatureName[];
-class FeatureResolver { constructor(registry: FeatureRegistry); resolve(enabled: readonly FeatureName[]): FeaturePlan; }
-class FeatureError extends FrameworkError { readonly code: 'UNKNOWN_FEATURE'|'MISSING_PREREQUISITE'|'FEATURE_CYCLE'|'FEATURE_IN_USE'; }
+class FeatureResolver {
+  constructor(registry: FeatureRegistry);
+  resolve(enabled: readonly FeatureName[]): FeaturePlan;
+}
+class FeatureError extends FrameworkError {
+  readonly code: 'UNKNOWN_FEATURE' | 'MISSING_PREREQUISITE' | 'FEATURE_CYCLE' | 'FEATURE_IN_USE';
+}
 ```
 
 ```ts
@@ -365,7 +417,7 @@ const KIT_REGISTRY: Token<KitRegistry>;
 declare function defineResource<TTable extends CrudTable>(table: TTable): ResourceBuilder<TTable>;
 interface ResourceBuilder<TTable> {
   schema(cfg: { create: ZodType; update: ZodType; response: ZodType }): this;
-  access(mode: 'public' | 'authenticated'): this;   // required — ADR-8
+  access(mode: 'public' | 'authenticated'): this; // required — ADR-8
   ownedBy(field: string): this;
   relations(map: RelationMap): this;
   include(allowlist: readonly string[]): this;
@@ -392,16 +444,16 @@ Full diagrams: `docs/architecture/sequence-diagram.mermaid` — three flows: **(
 
 **Assumptions adopted** (from the task brief, resolving the PM's open questions):
 
-| ID | Resolution | Rationale |
-|---|---|---|
-| **Q2** Blade templating | **Deferred** | `framwork.md` §11 makes rendering optional; Hono JSX is the optional path. Written decision goes in `docs/status.md`. |
-| **Q3** "except the ORM" | **Thin model metadata allowed** (serialization/scopes/soft-delete/relation metadata over Drizzle); no second query engine, no Eloquent schema source. | `framwork.md` §5 explicitly permits thin metadata; needed to expose relations (P0-3). |
-| **Q7** Node runtime | **Supported but secondary**; Bun remains the only *validated* runtime (ADR-1). Node gets an explicit runtime adapter + test matrix (T20, P1). | Minimizes risk; keeps the validated-runtime claim honest. |
-| **Q8** Parity target | **Behaviour parity where cheap, TypeScript-idiomatic equivalents otherwise**, with the mapping documented (T21). | TS idioms (e.g. `ResourceTransform` vs Laravel `JsonResource`) are accepted; the mapping doc closes the discoverability gap. |
-| **Q1** v13 *new* additions | Catalogued at **P2** (JSON:API, passkey/WebAuthn, AI SDK/semantic search) except `Cache::touch` which is cheap → **P1-8**. | Honors D2 while protecting the P0 critical path. |
-| **Q4/D3** "into its core" | **Thin `@framework/kits` abstraction that core depends on**; kits stay swappable behind ports. | Honors D3; preserves ADR-11 and §4c replaceability. |
-| **Q5/D1** removal semantics | **Both, selectable** — default = dependency removal + build exclusion; `--prune-sources` = additionally prune sources. | Both satisfy the same mechanical invariants (brief §4b #4). |
-| **Q6/D4** distribution | **Support all, Bun main** — versioning + peer-dep boundaries so `@framework/*` is npm-publishable and consumable by bun/pnpm/npm; removal works for `workspace:*` and npm. | Honors D4. |
+| ID                          | Resolution                                                                                                                                                                 | Rationale                                                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Q2** Blade templating     | **Deferred**                                                                                                                                                               | `framwork.md` §11 makes rendering optional; Hono JSX is the optional path. Written decision goes in `docs/status.md`.        |
+| **Q3** "except the ORM"     | **Thin model metadata allowed** (serialization/scopes/soft-delete/relation metadata over Drizzle); no second query engine, no Eloquent schema source.                      | `framwork.md` §5 explicitly permits thin metadata; needed to expose relations (P0-3).                                        |
+| **Q7** Node runtime         | **Supported but secondary**; Bun remains the only _validated_ runtime (ADR-1). Node gets an explicit runtime adapter + test matrix (T20, P1).                              | Minimizes risk; keeps the validated-runtime claim honest.                                                                    |
+| **Q8** Parity target        | **Behaviour parity where cheap, TypeScript-idiomatic equivalents otherwise**, with the mapping documented (T21).                                                           | TS idioms (e.g. `ResourceTransform` vs Laravel `JsonResource`) are accepted; the mapping doc closes the discoverability gap. |
+| **Q1** v13 _new_ additions  | Catalogued at **P2** (JSON:API, passkey/WebAuthn, AI SDK/semantic search) except `Cache::touch` which is cheap → **P1-8**.                                                 | Honors D2 while protecting the P0 critical path.                                                                             |
+| **Q4/D3** "into its core"   | **Thin `@framework/kits` abstraction that core depends on**; kits stay swappable behind ports.                                                                             | Honors D3; preserves ADR-11 and §4c replaceability.                                                                          |
+| **Q5/D1** removal semantics | **Both, selectable** — default = dependency removal + build exclusion; `--prune-sources` = additionally prune sources.                                                     | Both satisfy the same mechanical invariants (brief §4b #4).                                                                  |
+| **Q6/D4** distribution      | **Support all, Bun main** — versioning + peer-dep boundaries so `@framework/*` is npm-publishable and consumable by bun/pnpm/npm; removal works for `workspace:*` and npm. | Honors D4.                                                                                                                   |
 
 **Genuinely open (needs a decision before/within the task):**
 
@@ -460,38 +512,38 @@ nodemailer@^6                  # SMTP transport (P0-5) — peer, optional
 
 > **Hard rules honored:** T01 is project infrastructure (manifests + entry + deps in ONE task); every task groups **≥3 related files**; grouped by subsystem/layer, never one-file-per-task. The "≤5 tasks" cap is **relaxed** per the user's explicit request for a detailed, assigned breakdown → **22 tasks**.
 
-| Task | Name | Source files (from §2) | Depends on | Priority | Owner | Parallelization note |
-|---|---|---|---|---|---|---|
-| **T01** | **Project infrastructure & new-package skeletons** | `package.json` (workspaces), `tsconfig.base.json`, `packages/features/{package.json,tsconfig.json,src/index.ts}`, `packages/kits/{package.json,tsconfig.json,src/index.ts}`, `apps/minimal-feature/{package.json,tsconfig.json}`, `.github/workflows/ci.yml` | — | P0 | software-engineer | **Unblocks everything.** T02/T03/T06 can start once T01 lands; do not parallelize the skeleton edits. |
-| **T02** | **Kit-abstraction layer (`@framework/kits`)** | `packages/kits/src/{types,ports,registry,capabilities,constants,errors}.ts`, `packages/kits/tests/registry.test.ts`, `packages/core/package.json`, `packages/core/src/index.ts` | T01 | P0 | software-engineer | Parallel with T03. Re-seats the 5 existing kit adapters behind ports. |
-| **T03** | **Feature Builder core (registry + resolver + catalog + plan)** | `packages/features/src/{types,registry,resolver,catalog,plan,errors}.ts`, `packages/features/tests/{registry,resolver,catalog}.test.ts` | T01, T02 | P0 | software-engineer | Parallel with T02. **Highest-risk item — schedule an architect spike before coding.** |
-| **T04** | **Feature Builder CLI (`feature:*`) + wiring** | `packages/cli/src/commands/feature.ts`, `packages/cli/src/features/{manifest,wiring}.ts`, `packages/cli/src/commands/index.ts`, `apps/playground/bootstrap/features.ts`, `apps/playground/bootstrap/providers.ts`, `packages/cli/tests/features.test.ts` | T03 | P0 | software-engineer | Needs T03. Parallel with T06/T10–T17 (all only need T01). |
-| **T05** | **Feature exclusion verification (`feature:check` + prune)** | `packages/cli/src/features/{exclusion,verify,prune}.ts`, `apps/minimal-feature/*`, `packages/cli/tests/features.test.ts` | T04 | P0 | software-engineer | **QA-gated** (QA signs off the 6 invariants). Sequential after T04. |
-| **T06** | **Programmatic one-line CRUD API** | `packages/crud/src/{resource,register-resource}.ts`, `packages/crud/src/index.ts`, `packages/crud/tests/resource.test.ts`, `apps/playground/app/modules/products/index.ts` | T01 | P0 | software-engineer | Parallel with T02/T03. Only needs T01. |
-| **T07** | **Generator depth: relations + enums + jsonb** | `packages/cli/src/generators/crud/{relations,enums}.ts`, `packages/crud/src/relations.ts`, `packages/crud/tests/relations.test.ts` | T06 | P0 | software-engineer | Parallel with T08/T09 after T06. |
-| **T08** | **Composite keys + `--owned-by` + filter/sort DSL** | `packages/cli/src/generators/crud/{composite,ownership}.ts`, `packages/crud/src/filter-sort.ts`, `packages/crud/tests/filter-sort.test.ts` | T07 | P1 | software-engineer | Parallel with T09 after T07. |
-| **T09** | **Declarative resource/transform layer** | `packages/crud/src/transform.ts`, `packages/crud/src/index.ts`, `packages/crud/tests/transform.test.ts` | T06 | P0 | software-engineer | Parallel with T07/T08. |
-| **T10** | **Gate registry (closure abilities)** | `packages/auth/src/gate.ts`, `packages/auth/src/index.ts`, `packages/auth/tests/gate.test.ts` | T01 | P1 | software-engineer | Parallel (needs only T01). |
-| **T11** | **Crypt (AES-256-GCM)** | `packages/support/src/crypt.ts`, `packages/support/src/index.ts`, `packages/support/tests/crypt.test.ts` | T01 | P1 | software-engineer | Parallel (needs only T01). |
-| **T12** | **Localization (`__()`, locale, catalogs)** | `packages/http/src/localization/{translator,middleware}.ts`, `packages/http/src/index.ts`, `packages/http/tests/localization.test.ts` | T01 | P1 | software-engineer | Parallel (needs only T01). |
-| **T13** | **Outbound HTTP client (`Http::`)** | `packages/http/src/client/{client,fake}.ts`, `packages/http/src/index.ts`, `packages/http/tests/client.test.ts` | T01 | P1 | software-engineer | Parallel (needs only T01). |
-| **T14** | **SMTP mail transport** | `packages/mail/src/smtp-transport.ts`, `packages/mail/src/provider.ts`, `packages/mail/src/index.ts`, `packages/mail/tests/smtp.test.ts` | T01 | P0 | software-engineer | Parallel (needs only T01). Adds `nodemailer` optional peer. |
-| **T15** | **Notifications SMS channel (NotifyKit)** | `packages/notifications/src/sms-channel.ts`, `packages/notifications/src/provider.ts`, `packages/notifications/tests/sms.test.ts` | T02, T14 | P0 | software-engineer | Needs T02 (port) + T14 (email channel symmetry). |
-| **T16** | **Storage cloud disk (MinIO/S3 via StorageKit)** | `packages/storage/src/cloud-disk.ts`, `packages/storage/src/provider.ts`, `packages/storage/tests/cloud.test.ts`, `deployment/compose.yaml` | T02 | P0 | software-engineer | Needs T02. Adds MinIO to compose for real-infra test. |
-| **T17** | **Queuekit inspection-gap closure** | `packages/queue/src/inspection.ts`, `packages/queue/src/queuekit-adapter.ts`, `packages/queue/src/index.ts`, `packages/queue/tests/inspection.test.ts` | T02 | P0 | software-engineer | Needs T02. Preserves documented direct BullMQ path. |
-| **T18** | **Contract + override audit (every subsystem)** | one `*.override.test.ts` per subsystem under `packages/*/tests/`, `packages/*/src/index.ts` (contract exports), `docs/architecture/pattern-audit.md` | T02–T17 | P0 | **software-qa-engineer** | **QA-owned.** Runs after the subsystem tasks land; the measurable gate (1 override test/subsystem; contracts == subsystems). |
-| **T19** | **Remaining CLI generators + `integration:*`** | `packages/cli/src/commands/{simple-generators,planned,infrastructure}.ts`, `packages/cli/src/generators/scaffolds/{slices,templates-runtime}.ts`, `packages/cli/tests/generators.test.ts` | T01 | P0 | software-engineer | Parallel (needs only T01). Closes `make:model/migration/guard/user-provider/mail/notification/command/schedule/integration` + `integration:*`. |
-| **T20** | **Node runtime adapter + test matrix** | `packages/core/src/runtime/{runtime-adapter,bun-adapter,node-adapter}.ts`, `packages/cli/templates/application/runtimes/node/*`, `.github/workflows/ci.yml` | T01 | P1 | software-engineer | Parallel (needs only T01). Adds `@hono/node-server` optional peer. |
-| **T21** | **Laravel-concept mapping docs + Feature Builder docs** | `docs/architecture/laravel-concept-map.md`, `apps/docs/src/content/docs/guides/{laravel-mapping,feature-builder}.mdx` | T03, T18 | P0 | software-engineer | Sequential-ish (needs T03 catalog + T18 audit results). |
-| **T22** | **P2 v13 additions (JSON:API, passkey, AI SDK, `Collection`/`Str`/`Arr`, `Cache::touch`)** | `packages/crud/src/json-api.ts`, `packages/auth/src/passkey.ts`, `packages/ai/src/index.ts`, `packages/support/src/collection.ts`, `packages/cache/src/touch.ts`, per-package tests | T01 | P2 | software-engineer | Fully parallel (each opt-in, needs only T01). `Cache::touch` is cheap → may be pulled into the P1 path. |
+| Task    | Name                                                                                       | Source files (from §2)                                                                                                                                                                                                                                       | Depends on | Priority | Owner                    | Parallelization note                                                                                                                           |
+| ------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | -------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T01** | **Project infrastructure & new-package skeletons**                                         | `package.json` (workspaces), `tsconfig.base.json`, `packages/features/{package.json,tsconfig.json,src/index.ts}`, `packages/kits/{package.json,tsconfig.json,src/index.ts}`, `apps/minimal-feature/{package.json,tsconfig.json}`, `.github/workflows/ci.yml` | —          | P0       | software-engineer        | **Unblocks everything.** T02/T03/T06 can start once T01 lands; do not parallelize the skeleton edits.                                          |
+| **T02** | **Kit-abstraction layer (`@framework/kits`)**                                              | `packages/kits/src/{types,ports,registry,capabilities,constants,errors}.ts`, `packages/kits/tests/registry.test.ts`, `packages/core/package.json`, `packages/core/src/index.ts`                                                                              | T01        | P0       | software-engineer        | Parallel with T03. Re-seats the 5 existing kit adapters behind ports.                                                                          |
+| **T03** | **Feature Builder core (registry + resolver + catalog + plan)**                            | `packages/features/src/{types,registry,resolver,catalog,plan,errors}.ts`, `packages/features/tests/{registry,resolver,catalog}.test.ts`                                                                                                                      | T01, T02   | P0       | software-engineer        | Parallel with T02. **Highest-risk item — schedule an architect spike before coding.**                                                          |
+| **T04** | **Feature Builder CLI (`feature:*`) + wiring**                                             | `packages/cli/src/commands/feature.ts`, `packages/cli/src/features/{manifest,wiring}.ts`, `packages/cli/src/commands/index.ts`, `apps/playground/bootstrap/features.ts`, `apps/playground/bootstrap/providers.ts`, `packages/cli/tests/features.test.ts`     | T03        | P0       | software-engineer        | Needs T03. Parallel with T06/T10–T17 (all only need T01).                                                                                      |
+| **T05** | **Feature exclusion verification (`feature:check` + prune)**                               | `packages/cli/src/features/{exclusion,verify,prune}.ts`, `apps/minimal-feature/*`, `packages/cli/tests/features.test.ts`                                                                                                                                     | T04        | P0       | software-engineer        | **QA-gated** (QA signs off the 6 invariants). Sequential after T04.                                                                            |
+| **T06** | **Programmatic one-line CRUD API**                                                         | `packages/crud/src/{resource,register-resource}.ts`, `packages/crud/src/index.ts`, `packages/crud/tests/resource.test.ts`, `apps/playground/app/modules/products/index.ts`                                                                                   | T01        | P0       | software-engineer        | Parallel with T02/T03. Only needs T01.                                                                                                         |
+| **T07** | **Generator depth: relations + enums + jsonb**                                             | `packages/cli/src/generators/crud/{relations,enums}.ts`, `packages/crud/src/relations.ts`, `packages/crud/tests/relations.test.ts`                                                                                                                           | T06        | P0       | software-engineer        | Parallel with T08/T09 after T06.                                                                                                               |
+| **T08** | **Composite keys + `--owned-by` + filter/sort DSL**                                        | `packages/cli/src/generators/crud/{composite,ownership}.ts`, `packages/crud/src/filter-sort.ts`, `packages/crud/tests/filter-sort.test.ts`                                                                                                                   | T07        | P1       | software-engineer        | Parallel with T09 after T07.                                                                                                                   |
+| **T09** | **Declarative resource/transform layer**                                                   | `packages/crud/src/transform.ts`, `packages/crud/src/index.ts`, `packages/crud/tests/transform.test.ts`                                                                                                                                                      | T06        | P0       | software-engineer        | Parallel with T07/T08.                                                                                                                         |
+| **T10** | **Gate registry (closure abilities)**                                                      | `packages/auth/src/gate.ts`, `packages/auth/src/index.ts`, `packages/auth/tests/gate.test.ts`                                                                                                                                                                | T01        | P1       | software-engineer        | Parallel (needs only T01).                                                                                                                     |
+| **T11** | **Crypt (AES-256-GCM)**                                                                    | `packages/support/src/crypt.ts`, `packages/support/src/index.ts`, `packages/support/tests/crypt.test.ts`                                                                                                                                                     | T01        | P1       | software-engineer        | Parallel (needs only T01).                                                                                                                     |
+| **T12** | **Localization (`__()`, locale, catalogs)**                                                | `packages/http/src/localization/{translator,middleware}.ts`, `packages/http/src/index.ts`, `packages/http/tests/localization.test.ts`                                                                                                                        | T01        | P1       | software-engineer        | Parallel (needs only T01).                                                                                                                     |
+| **T13** | **Outbound HTTP client (`Http::`)**                                                        | `packages/http/src/client/{client,fake}.ts`, `packages/http/src/index.ts`, `packages/http/tests/client.test.ts`                                                                                                                                              | T01        | P1       | software-engineer        | Parallel (needs only T01).                                                                                                                     |
+| **T14** | **SMTP mail transport**                                                                    | `packages/mail/src/smtp-transport.ts`, `packages/mail/src/provider.ts`, `packages/mail/src/index.ts`, `packages/mail/tests/smtp.test.ts`                                                                                                                     | T01        | P0       | software-engineer        | Parallel (needs only T01). Adds `nodemailer` optional peer.                                                                                    |
+| **T15** | **Notifications SMS channel (NotifyKit)**                                                  | `packages/notifications/src/sms-channel.ts`, `packages/notifications/src/provider.ts`, `packages/notifications/tests/sms.test.ts`                                                                                                                            | T02, T14   | P0       | software-engineer        | Needs T02 (port) + T14 (email channel symmetry).                                                                                               |
+| **T16** | **Storage cloud disk (MinIO/S3 via StorageKit)**                                           | `packages/storage/src/cloud-disk.ts`, `packages/storage/src/provider.ts`, `packages/storage/tests/cloud.test.ts`, `deployment/compose.yaml`                                                                                                                  | T02        | P0       | software-engineer        | Needs T02. Adds MinIO to compose for real-infra test.                                                                                          |
+| **T17** | **Queuekit inspection-gap closure**                                                        | `packages/queue/src/inspection.ts`, `packages/queue/src/queuekit-adapter.ts`, `packages/queue/src/index.ts`, `packages/queue/tests/inspection.test.ts`                                                                                                       | T02        | P0       | software-engineer        | Needs T02. Preserves documented direct BullMQ path.                                                                                            |
+| **T18** | **Contract + override audit (every subsystem)**                                            | one `*.override.test.ts` per subsystem under `packages/*/tests/`, `packages/*/src/index.ts` (contract exports), `docs/architecture/pattern-audit.md`                                                                                                         | T02–T17    | P0       | **software-qa-engineer** | **QA-owned.** Runs after the subsystem tasks land; the measurable gate (1 override test/subsystem; contracts == subsystems).                   |
+| **T19** | **Remaining CLI generators + `integration:*`**                                             | `packages/cli/src/commands/{simple-generators,planned,infrastructure}.ts`, `packages/cli/src/generators/scaffolds/{slices,templates-runtime}.ts`, `packages/cli/tests/generators.test.ts`                                                                    | T01        | P0       | software-engineer        | Parallel (needs only T01). Closes `make:model/migration/guard/user-provider/mail/notification/command/schedule/integration` + `integration:*`. |
+| **T20** | **Node runtime adapter + test matrix**                                                     | `packages/core/src/runtime/{runtime-adapter,bun-adapter,node-adapter}.ts`, `packages/cli/templates/application/runtimes/node/*`, `.github/workflows/ci.yml`                                                                                                  | T01        | P1       | software-engineer        | Parallel (needs only T01). Adds `@hono/node-server` optional peer.                                                                             |
+| **T21** | **Laravel-concept mapping docs + Feature Builder docs**                                    | `docs/architecture/laravel-concept-map.md`, `apps/docs/src/content/docs/guides/{laravel-mapping,feature-builder}.mdx`                                                                                                                                        | T03, T18   | P0       | software-engineer        | Sequential-ish (needs T03 catalog + T18 audit results).                                                                                        |
+| **T22** | **P2 v13 additions (JSON:API, passkey, AI SDK, `Collection`/`Str`/`Arr`, `Cache::touch`)** | `packages/crud/src/json-api.ts`, `packages/auth/src/passkey.ts`, `packages/ai/src/index.ts`, `packages/support/src/collection.ts`, `packages/cache/src/touch.ts`, per-package tests                                                                          | T01        | P2       | software-engineer        | Fully parallel (each opt-in, needs only T01). `Cache::touch` is cheap → may be pulled into the P1 path.                                        |
 
 #### 7.1 Owner-assignment summary
 
-| Owner | Tasks | Count |
-|---|---|---|
-| **software-engineer** | T01, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16, T17, T19, T20, T21, T22 | 21 |
-| **software-qa-engineer** | T18 (+ QA sign-off gate on T05) | 1 owned, 2 gated |
-| **software-architect** | T03 pre-implementation spike (Feature Builder design validation) | 0 owned, 1 spike |
+| Owner                    | Tasks                                                                                                   | Count            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- | ---------------- |
+| **software-engineer**    | T01, T02, T03, T04, T05, T06, T07, T08, T09, T10, T11, T12, T13, T14, T15, T16, T17, T19, T20, T21, T22 | 21               |
+| **software-qa-engineer** | T18 (+ QA sign-off gate on T05)                                                                         | 1 owned, 2 gated |
+| **software-architect**   | T03 pre-implementation spike (Feature Builder design validation)                                        | 0 owned, 1 spike |
 
 #### 7.2 QA tasks (regression + exclusion-invariant verification)
 

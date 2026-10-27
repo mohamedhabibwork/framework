@@ -55,15 +55,15 @@ by end-to-end tests in `packages/cli/tests/`.
 
 ## Doc map (read the one you need)
 
-| Need | Read |
-|---|---|
-| Command reference | `docs/cli-reference.md` |
-| Module anatomy, Drizzle→Zod pipeline, policies, OpenAPI | `docs/modules.md` |
-| Request context, errors, pagination, events, queues | `docs/platform.md` |
-| Testing conventions | `docs/testing.md` |
-| Deployment and release steps | `docs/deployment.md` |
-| Architecture contracts | `framwork.md` |
-| File placement rules | `folder.md` |
+| Need                                                    | Read                    |
+| ------------------------------------------------------- | ----------------------- |
+| Command reference                                       | `docs/cli-reference.md` |
+| Module anatomy, Drizzle→Zod pipeline, policies, OpenAPI | `docs/modules.md`       |
+| Request context, errors, pagination, events, queues     | `docs/platform.md`      |
+| Testing conventions                                     | `docs/testing.md`       |
+| Deployment and release steps                            | `docs/deployment.md`    |
+| Architecture contracts                                  | `framwork.md`           |
+| File placement rules                                    | `folder.md`             |
 
 Sibling skills: `hono-framework-crud` (scaffolding resources), `hono-framework-auth`
 (authentication and authorization), `hono-framework-testing` (suites and release gates),

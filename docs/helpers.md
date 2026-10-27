@@ -15,9 +15,9 @@ import { config, env, abort, logger, correlationId } from '@framework/support';
 Dot-path access into the booted application's validated config — the same frozen object the container exposes as `CONFIG`:
 
 ```ts
-config('http.port');                // 3000
-config('database.url');             // postgres://…
-config('app.debug', false);         // with fallback
+config('http.port'); // 3000
+config('database.url'); // postgres://…
+config('app.debug', false); // with fallback
 config('no.such.path', 'fallback'); // 'fallback'
 ```
 
@@ -28,19 +28,19 @@ Throws `RUNTIME_NOT_BOOTED` when no `Application` was constructed — scripts sh
 Process-environment lookup. Process env always wins over `.env` files (the framework's documented precedence); an empty string counts as missing:
 
 ```ts
-env('REDIS_URL');                   // string | undefined
-env('QUEUE_NAME', 'default');       // string
+env('REDIS_URL'); // string | undefined
+env('QUEUE_NAME', 'default'); // string
 ```
 
 ## Context
 
 The HTTP kernel and the queue worker bind the current execution to the async chain, so these work anywhere below a request or a job:
 
-| Helper | Returns |
-|---|---|
-| `execution()` | Full context: `kind` (request/job/command), `correlationId`, `actor` |
-| `correlationId()` | The current request/job correlation id (`'standalone'` outside one) |
-| `currentActor()` | `{ id, type }` of who is acting (`anonymous` outside a scope) |
+| Helper            | Returns                                                              |
+| ----------------- | -------------------------------------------------------------------- |
+| `execution()`     | Full context: `kind` (request/job/command), `correlationId`, `actor` |
+| `correlationId()` | The current request/job correlation id (`'standalone'` outside one)  |
+| `currentActor()`  | `{ id, type }` of who is acting (`anonymous` outside a scope)        |
 
 ```ts
 await bus.publish(createDomainEvent('orders', 'created', payload, execution()));
@@ -54,8 +54,8 @@ logger().info('reserving stock', { orderId }); // log lines carry correlationId
 Throws the framework's `HttpError`, which the error handler renders as the standard JSON envelope. Accepts an HTTP status or a catalog code:
 
 ```ts
-abort(404);                                // NOT_FOUND
-abort('VALIDATION_FAILED', 'bad input');   // 422 with a message
+abort(404); // NOT_FOUND
+abort('VALIDATION_FAILED', 'bad input'); // 422 with a message
 ```
 
 ### `abort_if(condition, …)` / `abort_unless(condition, …)`
@@ -83,16 +83,16 @@ logger('orders').info('order created', { orderId: 'o-1' });
 
 ## Utilities
 
-| Helper | Purpose |
-|---|---|
+| Helper                                 | Purpose                                                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `retry(work, { attempts, backoffMs })` | Exponential-backoff retry for transient failures (queue semantics belong in `defineJob`) |
-| `sleep(ms)` | Promise-based delay |
-| `tap(value, fn)` | Run `fn` for its side effect, return `value` |
-| `value(input)` | Resolve `input` or `input()` (lazy values) |
-| `uuid()` | RFC 4122 v4 UUID |
-| `nowIso()` | Current time as ISO-8601 (the framework's JSON timestamp format) |
-| `redactForLogs(obj)` | Mask secret-looking keys (`apiKey`, `password`, …) |
-| `isSecret(key)` | Whether a key name looks like a secret |
+| `sleep(ms)`                            | Promise-based delay                                                                      |
+| `tap(value, fn)`                       | Run `fn` for its side effect, return `value`                                             |
+| `value(input)`                         | Resolve `input` or `input()` (lazy values)                                               |
+| `uuid()`                               | RFC 4122 v4 UUID                                                                         |
+| `nowIso()`                             | Current time as ISO-8601 (the framework's JSON timestamp format)                         |
+| `redactForLogs(obj)`                   | Mask secret-looking keys (`apiKey`, `password`, …)                                       |
+| `isSecret(key)`                        | Whether a key name looks like a secret                                                   |
 
 ```ts
 const reachable = await retry(() => pingService(), { attempts: 3, backoffMs: 200 });

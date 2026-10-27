@@ -50,9 +50,7 @@ const openSessionStore = authInstalled
   ? async (rawConfig: unknown) => {
       const config = rawConfig as AppConfig;
       const auth = (await import(AUTH_SPECIFIER)) as {
-        PgSessionStore: new (
-          connection: DatabaseConnection,
-        ) => {
+        PgSessionStore: new (connection: DatabaseConnection) => {
           countExpired(now?: Date): Promise<number>;
           prune(now?: Date): Promise<number>;
         };
@@ -97,8 +95,8 @@ export const project = defineProject({
   tools: {
     typecheck: ['bunx', 'tsc', '-p', 'tsconfig.json'],
     test: ['bun', 'test'],
-    lint: ['bunx', 'biome', 'check', '.'],
-    format: ['bunx', 'biome', 'format', '.'],
+    lint: ['bunx', 'oxlint', '.'],
+    format: ['bunx', 'oxfmt', '.'],
     drizzleKit: ['bunx', 'drizzle-kit'],
     dev: ['bun', 'run', '--hot', 'bin/server.ts'],
     serve: ['bun', 'run', 'bin/server.ts'],
