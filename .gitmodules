@@ -1,0 +1,108 @@
+[submodule "packages/ai-mcp"]
+	path = packages/ai-mcp
+	url = https://github.com/mohamedhabibwork/framework-ai-mcp.git
+	branch = main
+[submodule "packages/auth"]
+	path = packages/auth
+	url = https://github.com/mohamedhabibwork/framework-auth.git
+	branch = main
+[submodule "packages/cache"]
+	path = packages/cache
+	url = https://github.com/mohamedhabibwork/framework-cache.git
+	branch = main
+[submodule "packages/cli"]
+	path = packages/cli
+	url = https://github.com/mohamedhabibwork/framework-cli.git
+	branch = main
+[submodule "packages/core"]
+	path = packages/core
+	url = https://github.com/mohamedhabibwork/framework-core.git
+	branch = main
+[submodule "packages/crud"]
+	path = packages/crud
+	url = https://github.com/mohamedhabibwork/framework-crud.git
+	branch = main
+[submodule "packages/database"]
+	path = packages/database
+	url = https://github.com/mohamedhabibwork/framework-database.git
+	branch = main
+[submodule "packages/events"]
+	path = packages/events
+	url = https://github.com/mohamedhabibwork/framework-events.git
+	branch = main
+[submodule "packages/http"]
+	path = packages/http
+	url = https://github.com/mohamedhabibwork/framework-http.git
+	branch = main
+[submodule "packages/logging"]
+	path = packages/logging
+	url = https://github.com/mohamedhabibwork/framework-logging.git
+	branch = main
+[submodule "packages/mail"]
+	path = packages/mail
+	url = https://github.com/mohamedhabibwork/framework-mail.git
+	branch = main
+[submodule "packages/notifications"]
+	path = packages/notifications
+	url = https://github.com/mohamedhabibwork/framework-notifications.git
+	branch = main
+[submodule "packages/oauth-server"]
+	path = packages/oauth-server
+	url = https://github.com/mohamedhabibwork/framework-oauth-server.git
+	branch = main
+[submodule "packages/observatory"]
+	path = packages/observatory
+	url = https://github.com/mohamedhabibwork/framework-observatory.git
+	branch = main
+[submodule "packages/openapi"]
+	path = packages/openapi
+	url = https://github.com/mohamedhabibwork/framework-openapi.git
+	branch = main
+[submodule "packages/prompts"]
+	path = packages/prompts
+	url = https://github.com/mohamedhabibwork/framework-prompts.git
+	branch = main
+[submodule "packages/queue"]
+	path = packages/queue
+	url = https://github.com/mohamedhabibwork/framework-queue.git
+	branch = main
+[submodule "packages/scheduler"]
+	path = packages/scheduler
+	url = https://github.com/mohamedhabibwork/framework-scheduler.git
+	branch = main
+[submodule "packages/search"]
+	path = packages/search
+	url = https://github.com/mohamedhabibwork/framework-search.git
+	branch = main
+[submodule "packages/socialite"]
+	path = packages/socialite
+	url = https://github.com/mohamedhabibwork/framework-socialite.git
+	branch = main
+[submodule "packages/storage"]
+	path = packages/storage
+	url = https://github.com/mohamedhabibwork/framework-storage.git
+	branch = main
+[submodule "packages/support"]
+	path = packages/support
+	url = https://github.com/mohamedhabibwork/framework-support.git
+	branch = main
+[submodule "packages/testing"]
+	path = packages/testing
+	url = https://github.com/mohamedhabibwork/framework-testing.git
+	branch = main
+[submodule "packages/validation"]
+	path = packages/validation
+	url = https://github.com/mohamedhabibwork/framework-validation.git
+	branch = main
+[submodule "packages/workflow"]
+	path = packages/workflow
+	url = https://github.com/mohamedhabibwork/framework-workflow.git
+	branch = main
+[submodule "template"]
+	path = template
+	url = https://github.com/mohamedhabibwork/framework-app.git
+	branch = main
+[submodule "apps/docs"]
+	path = apps/docs
+	url = https://github.com/mohamedhabibwork/framework-docs.git
+	branch = main

@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - name: Extract CHANGELOG section for the tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
@@ -40,4 +42,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - run: docker build -f apps/docs/Dockerfile -t framework-docs:ci .

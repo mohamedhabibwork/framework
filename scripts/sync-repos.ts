@@ -1,15 +1,17 @@
 #!/usr/bin/env bun
 /**
- * Multi-repository ecosystem synchronizer for `mohamedhabibwork/framework`.
+ * Multi-repository ecosystem synchronizer & submodule linker for `mohamedhabibwork/framework`.
  *
- * Provisions and syncs:
+ * Provisions, syncs, and links (via Git submodules in `.gitmodules`):
  *   1. All 25 `@framework/*` packages in `packages/<pkg>` -> `mohamedhabibwork/framework-<pkg>`
- *      (rewriting `workspace:*` to `github:mohamedhabibwork/framework-<dep>` for standalone install)
- *   2. Starter application template -> `mohamedhabibwork/framework-app` (GitHub Template Repo)
- *   3. Documentation site & guides (`apps/docs` + `docs/`) -> `mohamedhabibwork/framework-docs`
+ *      - `main` branch mirrors `packages/<pkg>` for the monorepo submodule link
+ *      - `standalone` branch & `v<version>` tag rewrite `workspace:*` to
+ *        `github:mohamedhabibwork/framework-<dep>#standalone` for standalone installs
+ *   2. Starter application template in `template` -> `mohamedhabibwork/framework-app` (GitHub Template Repo)
+ *   3. Documentation site in `apps/docs` -> `mohamedhabibwork/framework-docs`
  *
  * Usage:
- *   bun run sync:repos                       # sync all 27 repos to GitHub
+ *   bun run sync:repos                       # sync all 27 repos to GitHub & update submodule links
  *   bun run sync:repos -- --dry-run          # stage and validate locally without pushing
  *   bun run sync:repos -- --only=core,http   # sync specific targets (package names, "app", or "docs")
  */
@@ -100,8 +102,67 @@ function ensureGitHubRepo(
   }
 }
 
-function pushStagedRepo(stageDir: string, fullName: string, commitMessage: string) {
-  run('git', ['init', '-b', 'main'], { cwd: stageDir, capture: true });
+function commitAndPushInPlace(
+  localDir: string,
+  relPath: string,
+  fullName: string,
+  commitMessage: string,
+  options: { tagVersion?: boolean } = {},
+): string {
+  const remoteUrl = `https://github.com/${fullName}.git`;
+  if (!existsSync(join(localDir, '.git'))) {
+    run('git', ['init', '-b', 'main'], { cwd: localDir, capture: true });
+  } else {
+    run('git', ['checkout', '-B', 'main'], { cwd: localDir, capture: true });
+  }
+  run('git', ['config', 'user.name', 'Mohamed Habib'], { cwd: localDir, capture: true });
+  run('git', ['config', 'user.email', 'mohamedhabibwork@users.noreply.github.com'], {
+    cwd: localDir,
+    capture: true,
+  });
+  const hasOrigin = run('git', ['remote', 'get-url', 'origin'], {
+    cwd: localDir,
+    capture: true,
+    allowFail: true,
+  }).ok;
+  if (hasOrigin) {
+    run('git', ['remote', 'set-url', 'origin', remoteUrl], { cwd: localDir, capture: true });
+  } else {
+    run('git', ['remote', 'add', 'origin', remoteUrl], { cwd: localDir, capture: true });
+  }
+
+  run('git', ['add', '-A'], { cwd: localDir, capture: true });
+  const status = run('git', ['status', '--porcelain'], { cwd: localDir, capture: true }).stdout;
+  const hasHead = run('git', ['rev-parse', '--verify', 'HEAD'], {
+    cwd: localDir,
+    capture: true,
+    allowFail: true,
+  }).ok;
+  if (status !== '' || !hasHead) {
+    run('git', ['commit', '-m', commitMessage], { cwd: localDir, capture: true });
+  }
+  if (options.tagVersion) {
+    run('git', ['tag', '-f', `v${version}`], { cwd: localDir, capture: true });
+  }
+
+  const sha = run('git', ['rev-parse', 'HEAD'], { cwd: localDir, capture: true }).stdout;
+
+  if (!dryRun) {
+    const pushArgs = ['push', '--force', 'origin', 'main'];
+    if (options.tagVersion) pushArgs.push('--tags');
+    run('git', pushArgs, { cwd: localDir, capture: true });
+    // Link path in main repo index as a Git submodule gitlink
+    run('git', ['rm', '-r', '--cached', '--ignore-unmatch', relPath], { capture: true, allowFail: true });
+    run('git', ['config', '-f', '.gitmodules', `submodule.${relPath}.path`, relPath], { capture: true });
+    run('git', ['config', '-f', '.gitmodules', `submodule.${relPath}.url`, remoteUrl], { capture: true });
+    run('git', ['config', '-f', '.gitmodules', `submodule.${relPath}.branch`, 'main'], { capture: true });
+    run('git', ['update-index', '--add', '--cacheinfo', `160000,${sha},${relPath}`], { capture: true });
+  }
+  return sha;
+}
+
+function pushStandaloneBranch(stageDir: string, fullName: string, commitMessage: string) {
+  run('git', ['init', '-b', 'standalone'], { cwd: stageDir, capture: true });
   run('git', ['config', 'user.name', 'Mohamed Habib'], { cwd: stageDir, capture: true });
   run('git', ['config', 'user.email', 'mohamedhabibwork@users.noreply.github.com'], {
     cwd: stageDir,
@@ -112,14 +173,16 @@ function pushStagedRepo(stageDir: string, fullName: string, commitMessage: strin
   run('git', ['tag', '-f', `v${version}`], { cwd: stageDir, capture: true });
 
   if (dryRun) {
-    print(`  [dry-run] staged ${fullName} at ${stageDir}`);
+    print(`  [dry-run] staged standalone branch for ${fullName} at ${stageDir}`);
     return;
   }
 
   const remoteUrl = `https://github.com/${fullName}.git`;
   run('git', ['remote', 'add', 'origin', remoteUrl], { cwd: stageDir, capture: true });
-  run('git', ['push', '--force', 'origin', 'main', '--tags'], { cwd: stageDir, capture: true });
-  print(`  Synced ${fullName} (main + v${version})`);
+  run('git', ['push', '--force', 'origin', 'standalone', `refs/tags/v${version}:refs/tags/v${version}`], {
+    cwd: stageDir,
+    capture: true,
+  });
 }
 
 function buildStandalonePackageManifest(pkgName: string): Record<string, unknown> {
@@ -131,7 +194,7 @@ function buildStandalonePackageManifest(pkgName: string): Record<string, unknown
     for (const [k, v] of Object.entries(deps)) {
       if (k.startsWith('@framework/') && v === 'workspace:*') {
         const depShort = k.replace(/^@framework\//, '');
-        out[k] = `github:${OWNER}/framework-${depShort}`;
+        out[k] = `github:${OWNER}/framework-${depShort}#standalone`;
       } else {
         out[k] = v;
       }
@@ -167,23 +230,31 @@ function buildStandalonePackageManifest(pkgName: string): Record<string, unknown
 
 function syncPackage(pkgName: string, scratchRoot: string) {
   const fullName = `${OWNER}/framework-${pkgName}`;
-  const srcPkgDir = join(repoRoot, 'packages', pkgName);
+  const relPath = `packages/${pkgName}`;
+  const srcPkgDir = join(repoRoot, relPath);
   const manifest = buildStandalonePackageManifest(pkgName);
   const description = `${String(manifest.description ?? '')} (Part of ${MAIN_REPO})`.trim();
 
-  print(`-> Package @framework/${pkgName} (${fullName})`);
+  print(`-> Package @framework/${pkgName} (${fullName} <-> ${relPath})`);
   ensureGitHubRepo(fullName, description, MAIN_REPO_URL);
 
+  writeFileSync(join(srcPkgDir, '.gitignore'), 'node_modules/\ndist/\ncoverage/\n.DS_Store\n');
+
+  const sha = commitAndPushInPlace(
+    srcPkgDir,
+    relPath,
+    fullName,
+    `chore(sync): @framework/${pkgName} v${version} from ${MAIN_REPO}@${headSha}`,
+  );
+
+  // Also publish `standalone` branch + `v<version>` tag with GitHub dependency specifiers
   const stageDir = join(scratchRoot, `framework-${pkgName}`);
   mkdirSync(stageDir, { recursive: true });
-
   for (const entry of readdirSync(srcPkgDir)) {
-    if (entry === 'node_modules' || entry === 'package.json' || entry === 'tsconfig.json') continue;
+    if (entry === 'node_modules' || entry === '.git' || entry === 'package.json' || entry === 'tsconfig.json') continue;
     cpSync(join(srcPkgDir, entry), join(stageDir, entry), { recursive: true, verbatimSymlinks: true });
   }
-
   writeFileSync(join(stageDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-
   const baseTsconfig = JSON.parse(readFileSync(join(repoRoot, 'tsconfig.base.json'), 'utf8')) as {
     compilerOptions: Record<string, unknown>;
   };
@@ -199,18 +270,21 @@ function syncPackage(pkgName: string, scratchRoot: string) {
       2,
     )}\n`,
   );
-
-  writeFileSync(join(stageDir, '.gitignore'), 'node_modules/\ndist/\n.DS_Store\n');
-
-  pushStagedRepo(stageDir, fullName, `chore(sync): @framework/${pkgName} v${version} from ${MAIN_REPO}@${headSha}`);
+  pushStandaloneBranch(
+    stageDir,
+    fullName,
+    `chore(release): @framework/${pkgName} v${version} standalone from ${MAIN_REPO}@${headSha}`,
+  );
+  print(`  Linked ${relPath} @ ${sha.slice(0, 7)} -> ${fullName} (main + standalone + v${version})`);
 }
 
-function syncAppTemplate(scratchRoot: string) {
+function syncAppTemplate() {
+  const relPath = 'template';
+  const stageDir = join(repoRoot, relPath);
   const description = `Starter application template for ${MAIN_REPO} (Bun + Hono + Drizzle + Zod)`;
-  print(`-> Starter App Template (${APP_REPO})`);
+  print(`-> Starter App Template (${APP_REPO} <-> ${relPath})`);
   ensureGitHubRepo(APP_REPO, description, MAIN_REPO_URL, { isTemplate: true });
 
-  const stageDir = join(scratchRoot, 'framework-app');
   mkdirSync(stageDir, { recursive: true });
 
   const files = appTemplateFiles({
@@ -244,7 +318,6 @@ function syncAppTemplate(scratchRoot: string) {
       };
       writeFileSync(dest, `${JSON.stringify(enriched, null, 2)}\n`);
     } else if (file.path === 'Dockerfile') {
-      // Allow standalone builds even before a lockfile is committed by the template user
       writeFileSync(
         dest,
         `FROM oven/bun:1.4.2-alpine AS build
@@ -367,30 +440,44 @@ jobs:
 `,
   );
 
-  pushStagedRepo(stageDir, APP_REPO, `chore(sync): starter app template v${version} from ${MAIN_REPO}@${headSha}`);
+  const sha = commitAndPushInPlace(
+    stageDir,
+    relPath,
+    APP_REPO,
+    `chore(sync): starter app template v${version} from ${MAIN_REPO}@${headSha}`,
+    { tagVersion: true },
+  );
+  print(`  Linked ${relPath} @ ${sha.slice(0, 7)} -> ${APP_REPO} (main + v${version})`);
 }
 
 function syncDocsRepo(scratchRoot: string) {
+  const relPath = 'apps/docs';
+  const appsDocsDir = join(repoRoot, relPath);
   const description = `Official Starlight documentation and reference guides for ${MAIN_REPO}`;
-  print(`-> Documentation Repository (${DOCS_REPO})`);
+  print(`-> Documentation Repository (${DOCS_REPO} <-> ${relPath})`);
   ensureGitHubRepo(DOCS_REPO, description, DOCS_SITE_URL);
 
+  const sha = commitAndPushInPlace(
+    appsDocsDir,
+    relPath,
+    DOCS_REPO,
+    `chore(sync): documentation v${version} from ${MAIN_REPO}@${headSha}`,
+  );
+
+  // Also publish `standalone` branch + `v<version>` tag with root `docs/` guides & standalone Dockerfile
   const stageDir = join(scratchRoot, 'framework-docs');
   mkdirSync(stageDir, { recursive: true });
 
-  const appsDocsDir = join(repoRoot, 'apps', 'docs');
   for (const entry of readdirSync(appsDocsDir)) {
-    if (['node_modules', 'dist', '.astro', '.wrangler', 'Dockerfile'].includes(entry)) continue;
+    if (['node_modules', 'dist', '.astro', '.wrangler', '.git', 'Dockerfile'].includes(entry)) continue;
     cpSync(join(appsDocsDir, entry), join(stageDir, entry), { recursive: true, verbatimSymlinks: true });
   }
 
-  // Include the Markdown reference guides from the root `docs/` folder
   const rootDocsDir = join(repoRoot, 'docs');
   if (existsSync(rootDocsDir)) {
     cpSync(rootDocsDir, join(stageDir, 'docs'), { recursive: true, verbatimSymlinks: true });
   }
 
-  // Standalone Dockerfile for building directly from the `framework-docs` repository root
   writeFileSync(
     join(stageDir, 'Dockerfile'),
     `# Documentation site image for ${DOCS_REPO} (linked with ${MAIN_REPO}).
@@ -419,7 +506,7 @@ HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -q -O /dev/null htt
 
 on:
   push:
-    branches: [main]
+    branches: [main, standalone]
   pull_request:
   workflow_dispatch:
 
@@ -451,12 +538,17 @@ jobs:
 `,
   );
 
-  pushStagedRepo(stageDir, DOCS_REPO, `chore(sync): documentation v${version} from ${MAIN_REPO}@${headSha}`);
+  pushStandaloneBranch(
+    stageDir,
+    DOCS_REPO,
+    `chore(release): documentation standalone v${version} from ${MAIN_REPO}@${headSha}`,
+  );
+  print(`  Linked ${relPath} @ ${sha.slice(0, 7)} -> ${DOCS_REPO} (main + standalone + v${version})`);
 }
 
 function main() {
   const scratchRoot = mkdtempSync(join(tmpdir(), 'framework-sync-'));
-  print(`Syncing ecosystem repositories for ${MAIN_REPO} v${version} (commit ${headSha})...`);
+  print(`Syncing & linking ecosystem repositories for ${MAIN_REPO} v${version} (commit ${headSha})...`);
   try {
     if (!dryRun && !onlySet) {
       run(
@@ -481,14 +573,20 @@ function main() {
     }
 
     if (!onlySet || onlySet.has('app')) {
-      syncAppTemplate(scratchRoot);
+      syncAppTemplate();
     }
 
     if (!onlySet || onlySet.has('docs')) {
       syncDocsRepo(scratchRoot);
     }
 
-    print('\nAll requested repositories processed.');
+    if (!dryRun) {
+      run('git', ['submodule', 'init'], { capture: true });
+      run('git', ['submodule', 'absorbgitdirs'], { capture: true });
+      print('\nInitialized and absorbed all submodule git directories into .git/modules/.');
+    }
+
+    print('All requested repositories synced and linked to main repo paths.');
   } finally {
     if (!dryRun) {
       rmSync(scratchRoot, { recursive: true, force: true });
