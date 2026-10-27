@@ -14,6 +14,7 @@
     "docs:dev": "bun run --cwd apps/docs dev",
     "docs:build": "bun run --cwd apps/docs build",
     "release": "bun scripts/release.ts",
+    "sync:repos": "bun scripts/sync-repos.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test ./packages ./apps",
     "coverage": "bun scripts/coverage.ts",

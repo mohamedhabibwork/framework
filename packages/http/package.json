@@ -1,8 +1,19 @@
 {
   "name": "@framework/http",
   "version": "0.2.0",
+  "description": "Hono HTTP kernel, structured errors, request scope, middleware registry, and authorization policies.",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "homepage": "https://github.com/mohamedhabibwork/framework-http#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamedhabibwork/framework.git",
+    "directory": "packages/http"
+  },
+  "bugs": {
+    "url": "https://github.com/mohamedhabibwork/framework/issues"
+  },
   "exports": {
     ".": "./src/index.ts"
   },

@@ -87,6 +87,8 @@ export async function planAuth(
     { path: files.index, content: renderAuthIndex() },
   ];
 
+  const workspace = await frameworkWorkspaceRoot(context.root);
+  const authDepSpec = workspace ? 'workspace:*' : 'github:mohamedhabibwork/framework-auth';
   const tablesSpecifier = await authTablesSpecifier(context, paths.schemaIndex);
 
   const updates: readonly FileUpdate[] = [
@@ -94,7 +96,7 @@ export async function planAuth(
       path: 'package.json',
       transform: (source) => {
         const pkg = JSON.parse(source) as { dependencies: Record<string, string> };
-        pkg.dependencies['@framework/auth'] = 'workspace:*';
+        pkg.dependencies['@framework/auth'] = authDepSpec;
         pkg.dependencies = Object.fromEntries(Object.entries(pkg.dependencies).sort(([a], [b]) => a.localeCompare(b)));
         return `${JSON.stringify(pkg, null, 2)}\n`;
       },

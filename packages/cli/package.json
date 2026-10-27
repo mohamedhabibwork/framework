@@ -1,8 +1,19 @@
 {
   "name": "@framework/cli",
   "version": "0.2.0",
+  "description": "CLI runtime, command registry, and application/module/auth code generators.",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "homepage": "https://github.com/mohamedhabibwork/framework-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamedhabibwork/framework.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/mohamedhabibwork/framework/issues"
+  },
   "exports": {
     ".": "./src/index.ts"
   },

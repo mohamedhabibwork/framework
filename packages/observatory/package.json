@@ -1,8 +1,19 @@
 {
   "name": "@framework/observatory",
   "version": "0.2.0",
+  "description": "Request, query, event, job, and exception telemetry and inspection.",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "homepage": "https://github.com/mohamedhabibwork/framework-observatory#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamedhabibwork/framework.git",
+    "directory": "packages/observatory"
+  },
+  "bugs": {
+    "url": "https://github.com/mohamedhabibwork/framework/issues"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
