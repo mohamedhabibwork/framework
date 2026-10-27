@@ -11,7 +11,7 @@
     "@framework/cache": "workspace:*",
     "@framework/core": "workspace:*",
     "@framework/http": "workspace:*",
-    "hono": "4.13.12",
+    "hono": "4.13.13",
     "jose": "6",
     "zod": "4.6.5"
   },

@@ -2,10 +2,10 @@
   "name": "docs",
   "version": "0.0.1",
   "dependencies": {
-    "@astrojs/cloudflare": "^14.3.3",
-    "@astrojs/mdx": "^8.0.2",
+    "@astrojs/cloudflare": "^14.3.4",
+    "@astrojs/mdx": "^8.0.3",
     "@astrojs/starlight": "^0.42.5",
-    "astro": "^7.2.10",
+    "astro": "^7.3.7",
     "sharp": "^0.35.3"
   },
   "scripts": {
@@ -19,6 +19,6 @@
   },
   "type": "module",
   "devDependencies": {
-    "wrangler": "^4.147.0"
+    "wrangler": "^4.148.0"
   }
 }

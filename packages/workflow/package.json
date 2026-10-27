@@ -14,8 +14,8 @@
     "@framework/queue": "workspace:*",
     "@framework/validation": "workspace:*",
     "bullmq": "6.3.11",
-    "drizzle-orm": "0.45.3",
-    "hono": "4.13.12",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.13",
     "zod": "4.6.5"
   },
   "devDependencies": {

@@ -123,14 +123,14 @@ function packageJson({ name }: AppTemplateInput): string {
     "@framework/storage": "workspace:*",
     "@framework/support": "workspace:*",
     "@framework/validation": "workspace:*",
-    "drizzle-orm": "0.45.3",
-    "hono": "4.13.12",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.13",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@framework/testing": "workspace:*",
     "drizzle-kit": "0.31.11",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }
 `;
