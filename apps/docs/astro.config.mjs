@@ -1,26 +1,21 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import mdx from '@astrojs/mdx';
-import cloudflare from '@astrojs/cloudflare';
 import starlight from '@astrojs/starlight';
 import { docsVersions, formatLine } from './src/data/versions';
 import { sidebarFor } from './src/data/sidebar';
 
 // MDX 8's markdown engine ("satteri") needs a runtime binding: native on
-// Node, WebAssembly in browsers and in Astro 7's workerd-based dev isolation.
-// Bun skips satteri's wasm32 optional dependency during install, so
-// `scripts/ensure-satteri-wasm.mjs` (postinstall) extracts the vendored
-// tarball from vendor/ into the package store. No vite overrides needed.
+// Node, WebAssembly in browsers. Bun skips satteri's wasm32 optional
+// dependency during install, so `scripts/ensure-satteri-wasm.mjs`
+// (postinstall) extracts the vendored tarball from vendor/ into the package
+// store. No vite overrides needed.
 
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://framework.habib.cloud',
+	// Fully static: dist/ is served by nginx in the Dokploy image (apps/docs/Dockerfile).
 	output: 'static',
-	adapter: cloudflare({
-		// Prerender (and `astro dev` rendering) in Node: workerd cannot load
-		// satteri's native N-API binding, which made every page 500 in dev.
-		prerenderEnvironment: 'node',
-	}),
 	integrations: [
 		// starlight first: it registers astro-expressive-code, which must come
 		// before mdx() so MDX pages get syntax-highlighted code blocks.

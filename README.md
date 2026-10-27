@@ -16,12 +16,12 @@ A Bun + Hono + Drizzle + Zod framework workspace. Specification: [framwork.md](f
 | [AI integration](docs/ai.md) | MCP server (framework tools + docs resources) and agent skills |
 | [Implementation status](docs/status.md) | What is validated, implemented or planned |
 
-The same documentation ships as a [Starlight](https://starlight.astro.build) site (MDX + Cloudflare adapter) in `apps/docs`:
+The same documentation ships as a [Starlight](https://starlight.astro.build) site (static MDX output, served by nginx on Dokploy) in `apps/docs`:
 
 ```sh
 bun run docs:dev      # local preview
 bun run docs:build    # static build to apps/docs/dist
-bun run docs:deploy   # wrangler deploy to Cloudflare
+docker build -f apps/docs/Dockerfile .   # the image Dokploy deploys on push to main
 ```
 
 ## Layout
@@ -40,7 +40,7 @@ packages/testing     isolated PostgreSQL test databases
 packages/cli         CLI runtime, commands, app + make:crud generators
 packages/ai-mcp      MCP server bridging the app CLI and docs for AI agents
 apps/playground      reference application (products module)
-apps/docs            Starlight documentation site (MDX, Cloudflare)
+apps/docs            Starlight documentation site (MDX, Dokploy)
 deployment/          local PostgreSQL + Redis (compose)
 ```
 

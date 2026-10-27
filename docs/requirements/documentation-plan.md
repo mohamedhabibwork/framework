@@ -172,7 +172,7 @@ Legend — **Status:** ✅ exists · 🔶 exists but drifting/incomplete · 🆕
 
 | Aspect | Current state | Required change |
 |---|---|---|
-| Framework | Astro 7 + Starlight 0.42 + MDX 8, `output: 'static'`, Cloudflare adapter (`prerenderEnvironment: 'node'` because MDX 8's wasm32 runtime can't load in workerd) | Keep. Do not change the adapter/vendor workaround — it is load-bearing (`apps/docs/AGENTS.md`, `scripts/ensure-satteri-wasm.mjs`). |
+| Framework | Astro 7 + Starlight 0.42 + MDX 8, `output: 'static'` served by nginx on Dokploy (was: Cloudflare adapter, `prerenderEnvironment: 'node'` because MDX 8's wasm32 runtime can't load in workerd) | Keep. Do not change the adapter/vendor workaround — it is load-bearing (`apps/docs/AGENTS.md`, `scripts/ensure-satteri-wasm.mjs`). |
 | Sidebar | Single array in `apps/docs/src/data/sidebar.ts` (`sidebarFor(line)`): Introduction · Getting started · Guides · Helpers · CLI reference · Authoring modules · Platform guide · Testing · Deployment · Reference | Add groups: **Feature Builder**, **CRUD**, **Laravel migration**, **Configuration**, **API reference**, **Security**, **Upgrade**, **Troubleshooting**, **Contributing**. Keep `sidebarFor(line)` signature so archived lines can diverge. |
 | Versioning | Laravel-style docs lines: `src/data/versions.ts` (`latest: '0.1'`), snapshot via `apps/docs/scripts/snapshot-version.mjs`, only called by `bun run release` | Keep. New pages must land in the current line; the release flow archives the previous line. Docs added by this plan must not be written directly into a frozen `v0X` locale. |
 | i18n | `root` (en) + `ar` (RTL). One sidebar for all locales; `ar` falls back to EN slugs | Keep. New pages EN-only; do not hand-translate (no translation owner). |

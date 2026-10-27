@@ -13,7 +13,6 @@
     "mcp": "bun run packages/ai-mcp/src/index.ts",
     "docs:dev": "bun run --cwd apps/docs dev",
     "docs:build": "bun run --cwd apps/docs build",
-    "docs:deploy": "bun run --cwd apps/docs deploy",
     "release": "bun scripts/release.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test ./packages ./apps",

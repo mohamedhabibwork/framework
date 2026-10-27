@@ -26,7 +26,7 @@
  *   via apps/docs/scripts/snapshot-version.mjs (the only supported caller).
  *
  * Deliberately NOT done here: publishing packages, deploying the docs site
- * (`bun run docs:deploy` when ready) and pushing to a remote.
+ * (Dokploy redeploys the docs when main is pushed) and pushing to a remote.
  */
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -170,7 +170,7 @@ if (snapshotRan) {
 print(`  - committed chore(release): v${version} and tagged v${version}`);
 print('Not done (deliberate):');
 print('  - no package publish');
-print('  - docs site not deployed — run `bun run docs:deploy` when ready');
+print('  - docs site not deployed — Dokploy redeploys it when main is pushed');
 print('  - nothing pushed to a remote');
 
 // --- Changelog helpers -------------------------------------------------------
