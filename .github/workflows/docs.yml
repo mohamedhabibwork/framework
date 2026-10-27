@@ -4,12 +4,14 @@ on:
   push:
     branches: [main]
     paths:
+      - 'docs/**'
       - 'apps/docs/**'
       - 'packages/**/src/**'
       - '.dockerignore'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
+      - 'docs/**'
       - 'apps/docs/**'
   workflow_dispatch:
 
@@ -18,8 +20,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build docs site
+  check:
+    name: Docs integrity + build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -29,7 +31,16 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      # Astro 7 requires Node >= 22.23.4; the docs site is the only Node
+      # consumer in the repository (application code runs on Bun).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - run: bun install --frozen-lockfile
+      # Fails on stale generated pages, missing frontmatter, duplicate H1s,
+      # orphan pages, broken internal links or an out-of-date package catalog.
+      - name: Docs integrity
+        run: bun run docs:check
       - name: Build
         run: bun run --cwd apps/docs build
 

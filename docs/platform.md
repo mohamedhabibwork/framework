@@ -305,11 +305,14 @@ updates.
 **HTTP** (`workflowRoutes()`, mounted at `/admin/workflows` in the
 playground, outside the documented `/api` prefix like `/health`): `GET /`
 (paginated runs), `GET /:runId` (run + node tree), `POST
-/:runId/retry|cancel|resume`, `POST /dispatch`. Unprotected until Phase
-3 auth; pass an `authorize` hook when guards land.
+/:runId/retry|cancel|resume`, `POST /dispatch`. Mounting requires an
+authorization decision: pass an `authorize` callback (a guard, an auth
+middleware or the explicit `'public'` opt-out) — the routes refuse to mount
+without one, so an admin surface can never be exposed by omission.
 
-**CLI**: `workflow:list`, `workflow:status <id-prefix>`, `workflow:retry
-<id> [--from <node path>]`, `workflow:cancel <id>`, `workflow:prune --days <n>`.
+**CLI**: `workflow:list`, `workflow:status <id-prefix>`,
+`workflow:retry <id> [--from <node path>]`, `workflow:cancel <id>`,
+`workflow:prune --days <n>`.
 
 ## Scheduling (cron)
 

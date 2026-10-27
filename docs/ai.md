@@ -1,81 +1,99 @@
-# AI integration (skills + MCP)
+# AI integration
 
-The framework is designed to be operated by AI coding agents. Two integration layers ship
-in the repository; both are optional and compose with the plain CLI.
+The framework is built to be operated by coding agents as well as people. Two
+layers ship in the repository, both optional and both delegating to the same
+application CLI — there is no second implementation of any command.
 
-## MCP server — `packages/ai-mcp`
+## MCP server
 
-A Model Context Protocol server that exposes the application CLI **in-process** (through
-the embeddable `runCli` API, no child process) with the machine-readable `--json` envelope
-always enabled, plus the repository documentation as resources.
+`packages/ai-mcp` is a Model Context Protocol server that exposes the
+application CLI **in-process** (through the embeddable `runCli` API, not a child
+process) with the machine-readable `--json` envelope always on, plus the
+repository documentation as resources.
 
-Registered via [`.mcp.json`](../.mcp.json) (Claude Code / ZCode pick it up automatically) or
-run by hand:
+It is registered in [`.mcp.json`](../.mcp.json) (Claude Code and ZCode pick it
+up automatically) or run by hand:
 
 ```sh
-bun run mcp                      # stdio transport
-FRAMEWORK_APP_DIR=apps/my-api bun run mcp   # target another generated app
+bun run mcp                                   # stdio transport
+FRAMEWORK_APP_DIR=apps/my-api bun run mcp     # target another generated app
 ```
 
-| Env                        | Meaning                                                                      | Default           |
-| -------------------------- | ---------------------------------------------------------------------------- | ----------------- |
-| `FRAMEWORK_APP_DIR`        | App directory whose `bin/cli.ts` is bridged (workspace-relative or absolute) | `apps/playground` |
-| `FRAMEWORK_ROOT`           | Workspace root override                                                      | auto-detected     |
-| `FRAMEWORK_MCP_TIMEOUT_MS` | Per-invocation timeout                                                       | `120000`          |
+| Environment variable       | Meaning                                                                    | Default           |
+| -------------------------- | -------------------------------------------------------------------------- | ----------------- |
+| `FRAMEWORK_APP_DIR`        | Application whose `bin/cli.ts` is bridged (workspace-relative or absolute) | `apps/playground` |
+| `FRAMEWORK_ROOT`           | Workspace root override                                                    | auto-detected     |
+| `FRAMEWORK_MCP_TIMEOUT_MS` | Per-invocation timeout                                                     | `120000`          |
 
 ### Tools
 
-Structured wrappers (input is validated, `--json --no-interaction` enforced, long-running
-processes rejected):
+| Group       | Tools                                                                                                    |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| Discovery   | `catalog`, `help`, `doctor`, `routes_list`, `modules_list`, `config_check`, `config_show`, `run_command` |
+| Scaffolding | `crud_scaffold` (`make:crud`), `auth_install` (`make:auth`)                                              |
+| Database    | `db_status`, `db_generate`, `db_migrate`                                                                 |
+| Runtime     | `queue_status`, `workflow_list`, `workflow_status`, `workflow_retry`, `workflow_cancel`, `schedule_list` |
+| API surface | `openapi_generate`, `openapi_check`                                                                      |
+| Checks      | `checks` (typecheck / lint / test / format through the CLI)                                              |
+| Docs        | `docs_list`, `docs_read`, `docs_search`                                                                  |
 
-- **Discovery** — `catalog`, `help`, `run_command` (generic passthrough), `doctor`,
-  `routes_list`, `modules_list`, `config_check`, `config_show`
-- **Scaffolding** — `crud_scaffold` (`make:crud`), `auth_install` (`make:auth`)
-- **Database** — `db_status`, `db_generate`, `db_migrate`
-- **Runtime** — `queue_status`, `workflow_list`, `workflow_status`, `workflow_retry`,
-  `workflow_cancel`, `schedule_list`
-- **API surface** — `openapi_generate`, `openapi_check`
-- **Checks** — `checks` (typecheck / lint / test / format through the CLI)
-- **Docs** — `docs_list`, `docs_read`, `docs_search` (whitelisted repository documents
-  only; path traversal is rejected)
-
-Every CLI-backed tool result embeds the CLI exit code and envelope, so agents can
-distinguish failure (`1`), invalid usage (`2`) and unsupported capability (`3`) from
-success. `serve`, `dev`, `queue:work` and `schedule:work` are refused because they are
-processes, not operations.
+Every CLI-backed tool validates its input, forces `--json --no-interaction`, and
+returns the CLI exit code with the envelope, so an agent can distinguish
+execution failure (`1`), invalid usage (`2`) and unsupported capability (`3`)
+from success. Process commands (`serve`, `dev`, `queue:work`, `schedule:work`)
+are refused: they are processes, not operations.
 
 ### Resources
 
-`fwdocs://docs/<file>.md` plus the root guides (`framwork.md`, `folder.md`, `README.md`,
-`CHANGELOG.md`, …) — the same set `docs_list`/`docs_read` expose.
+`fwdocs://docs/<file>.md` plus the root guides (`framwork.md`, `folder.md`,
+`README.md`, `CHANGELOG.md`, …) — the same set `docs_list` / `docs_read` expose.
+Paths are whitelisted and traversal is rejected; `docs_read` clamps large files.
 
 ### Embedding contract
 
-The bridge requires the app's `bin/cli.ts` to export its `project` adapter and run the CLI
-only under `import.meta.main` — the shape the `create` generator emits since this feature
-landed. Older generated apps keep working as CLIs; re-scaffold or apply the same two-line
-change to bridge them.
+The bridge requires the application's `bin/cli.ts` to export its `project`
+adapter and run the CLI only under `import.meta.main` — the shape `create`
+emits. Older generated applications keep working as CLIs; re-scaffold or apply
+the same two-line change to bridge them.
 
-## Skills
+## Agent skills
 
-Project skills live in `.zcode/skills/` (loaded by ZCode from this repository) and are
-mirrored by the same content in `docs/`:
+Project skills live in `.zcode/skills/` and teach an agent the workspace
+conventions the CLI cannot infer:
 
 | Skill                    | Covers                                                                      |
 | ------------------------ | --------------------------------------------------------------------------- |
-| `hono-framework`         | Workspace layout, CLI envelope contract, checks, doc map                    |
+| `hono-framework`         | Workspace layout, CLI envelope contract, checks, documentation map          |
 | `hono-framework-crud`    | `make:crud` field grammar, modes, dry-run → verify workflow, file ownership |
 | `hono-framework-auth`    | `make:auth`, guards, abilities, TOTP/recovery/JWT flows, deny-by-default    |
 | `hono-framework-testing` | Isolated databases, generated suites, release gate                          |
 | `hono-framework-ops`     | Migrations, queues, schedules, workflows, maintenance commands              |
 
-For Claude Code, symlink the folder: `ln -s .zcode/skills .claude/skills`.
+For Claude Code, link the folder once: `ln -s .zcode/skills .claude/skills`.
+
+## Recommended agent loop
+
+1. `catalog` — see which commands exist and whether they are implemented.
+2. `crud_scaffold` with `--dry-run` — preview every file the generator would
+   write, and which module it touches.
+3. `crud_scaffold` for real, then `checks` — typecheck plus the generated
+   endpoint suite on an isolated database.
+4. `openapi_check` — fail fast if the new route and its operation disagree.
+5. `docs_read` — when a convention is unclear, read the guide the CLI links to
+   instead of guessing.
 
 ## Design rules
 
-1. One operation surface: MCP tools and skills both delegate to the app CLI — no second
-   implementation of commands to keep in sync.
-2. Machine output everywhere: the `--json` envelope is the contract agents parse; human
-   formatting stays on the text path.
-3. Safety mirrors the CLI: capability gating (exit 3), `--confirm` for destructive
-   maintenance, no auto-migrations, no invented schema columns.
+1. **One operation surface.** MCP tools and skills delegate to the application
+   CLI; a behaviour fixed once is fixed everywhere.
+2. **Machine output everywhere.** The `--json` envelope is the contract agents
+   parse; human formatting stays on the text path.
+3. **Safety mirrors the CLI.** Capability gating (exit `3`), `--confirm` for
+   destructive maintenance, no automatic migrations, no invented schema columns.
+4. **No hidden network.** The server talks to the local CLI only.
+
+## Related
+
+- [CLI reference](cli-reference.md) — the commands behind every tool
+- [Testing](testing.md) — what `checks` actually runs
+- [Implementation status](status.md) — known limits of the MCP bridge

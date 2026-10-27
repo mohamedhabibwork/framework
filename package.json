@@ -13,6 +13,8 @@
     "mcp": "bun run packages/ai-mcp/src/index.ts",
     "docs:dev": "bun run --cwd apps/docs dev",
     "docs:build": "bun run --cwd apps/docs build",
+    "docs:sync": "bun apps/docs/scripts/sync-docs.ts",
+    "docs:check": "bun apps/docs/scripts/check-docs.ts",
     "release": "bun scripts/release.ts",
     "sync:repos": "bun scripts/sync-repos.ts",
     "typecheck": "tsc -p tsconfig.json",
