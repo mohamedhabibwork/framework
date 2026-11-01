@@ -36,6 +36,9 @@ classDiagram
         <<interface>>
         +string name
         +string[] dependsOn
+        +Token[] provides
+        +Token[] requires
+        +Token[] optional
         +register(ctx) void
         +boot(ctx) void
         +shutdown(ctx) void

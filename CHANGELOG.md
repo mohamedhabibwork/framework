@@ -17,6 +17,12 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   resolves to. `Container.bindDefault` lets providers register defaults that
   yield to an app's own binding. Both fail clearly once the token has been
   resolved. First step of M8 in the new [1.0 roadmap](docs/roadmap-v1.md).
+- Providers can declare `provides`, `requires` and `optional` tokens. Boot order
+  follows them as well as `dependsOn`, so provider list order no longer matters.
+  A `requires` token that no provider provides and the app has not bound fails
+  boot before any provider registers. The cache provider declares its tokens
+  and auth uses `RATE_LIMITER` optionally, so the "cache must stay above auth"
+  rule in generated apps and the playground is gone.
 
 ### Changed
 

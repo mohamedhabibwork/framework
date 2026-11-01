@@ -14,13 +14,15 @@ import { storageProvider } from '../app/providers/storage.provider';
 import { workflowsProvider } from '../app/workflows';
 import type { AppConfig } from '../config';
 
-/** Explicit provider registration. Order is resolved from `dependsOn`. */
+/**
+ * Explicit provider registration. List order does not matter: boot order is
+ * resolved from `dependsOn` and the tokens each provider `provides` /
+ * `requires` / uses (`optional`).
+ */
 export const providers: readonly ServiceProvider<AppConfig>[] = [
   databaseProvider,
   eventsProvider,
   listenersProvider,
-  // Before authProvider: auth binds the login rate limiter from the cache
-  // stack while registering (container.has(RATE_LIMITER)).
   cacheProvider,
   authProvider,
   dataProvider,
