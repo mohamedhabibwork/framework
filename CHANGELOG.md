@@ -29,6 +29,12 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   paths or mismatched fallbacks fail to compile. Unaugmented code keeps today's
   types. A fixture app compiled by its own `tsc` program covers the contract
   (`packages/support/tests/register.test.ts`).
+- `defineConfig(sections)` and `fromEnv(name, schema)` in `@framework/core`
+  compose the config schema and derive its environment mapping from the
+  bindings. This replaces the hand-written `mapEnvironment` and its casts.
+  It exposes `load()` (env file < process env < defaults), `parse(env)`,
+  `envKeys`, and `InferConfig` for the app's config type. Generated apps
+  move to it with the M8 template rewrite.
 
 ### Changed
 
