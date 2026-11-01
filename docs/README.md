@@ -29,7 +29,8 @@ docs site and AI agents at once.
 
 Specification and planning documents (not user guides):
 [framwork.md](../framwork.md) (the specification), [folder.md](../folder.md)
-(layout rules), [enhancement-plan.md](enhancement-plan.md) (open work),
+(layout rules), [roadmap-v1.md](roadmap-v1.md) (open work to 1.0),
+[enhancement-plan.md](enhancement-plan.md) (the delivered M1–M7 plan),
 [architecture/](architecture/) (ADRs, diagrams, delivery plans),
 [requirements/](requirements/) (scope), [testing/](testing/) (test plans),
 [documentation-upgrade.md](documentation-upgrade.md) (the latest documentation and

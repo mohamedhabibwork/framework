@@ -9,6 +9,15 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ## [Unreleased]
 
+### Added
+
+- `Container.override(token, factory)` replaces any binding app-wide. It wins over
+  `bind` regardless of registration order and inherits the replaced lifetime.
+  `Container.extend(token, decorate)` stacks decorators on whatever a token
+  resolves to. `Container.bindDefault` lets providers register defaults that
+  yield to an app's own binding. Both fail clearly once the token has been
+  resolved. First step of M8 in the new [1.0 roadmap](docs/roadmap-v1.md).
+
 ### Changed
 
 - The documentation site deploys on Dokploy instead of Cloudflare Workers:

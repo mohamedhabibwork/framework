@@ -1,0 +1,210 @@
+# Roadmap to 1.0
+
+The live roadmap from v0.3 to v1.0. It replaces [enhancement-plan.md](enhancement-plan.md),
+which stays as the record of M1–M7. Open items carried over from that plan are tagged
+"old Mx" below. Last reviewed: 2026-11-01.
+
+**Goal:** a client creates a project with minimal code and can replace any part of
+the framework without editing framework code.
+
+## Where we are
+
+The 2026-11-01 audit (evidence in [status.md](status.md)) found:
+
+- A blank generated app is about 25 hand-wired files and about 1,000 lines before
+  any business code: `template/bootstrap/*`, 9 provider wrappers, a 162-line
+  `config/index.ts`, `bin/*`, and a copied `routes/health.ts`.
+- One CRUD table takes 14 files and about 277 lines, and each module must be
+  registered in 3 places (`bootstrap/providers.ts`, `routes/api.ts`,
+  `bootstrap/openapi.ts`).
+- Nothing can be replaced: `Container.bind` throws `DUPLICATE_BINDING`, and
+  `createAuthProvider` binds its stores unconditionally.
+- Types are lost at API boundaries:
+  - `UserRecord` is fixed to the framework `users` table.
+  - `resourceRoutes` drops Hono RPC types.
+  - Job and notification registries are `any`.
+  - Notification channels and guard names are closed unions.
+  - `ownedBy` accepts any string.
+- Provider list order still matters, for example cache before auth.
+
+## Design principle: two override layers
+
+1. **App-wide types: the augmentable `Register` interface** in `@framework/core`.
+   ```ts
+   declare module '@framework/core' {
+     interface Register {
+       user: typeof users.$inferSelect;
+       config: AppConfig;
+       jobs: typeof jobs;
+       notifications: typeof notifications;
+       events: AppEvents;
+       tenant: Tenant;
+       permissions: 'posts.publish' | 'users.manage';
+       channels: 'whatsapp';
+       guards: 'partner-api';
+     }
+   }
+   ```
+   Packages read their defaults from `Register`. Without augmentation, today's
+   types remain the defaults.
+2. **Local overrides: generics and options on every `define*` / `create*`.**
+   At the end of the chain, `container.override(token, factory)` (or
+   `defineApp({ overrides })`) replaces any binding, including ones the framework
+   owns.
+
+The target minimal app:
+
+```ts
+// app.ts
+export default defineApp({
+  config: defineConfig({ app: appSlice, database: true, cache: true, queue: true, mail: true }),
+  modules: [postsModule],
+  overrides: [[MAIL_TRANSPORT, smtp()]],
+});
+
+// modules/posts.ts
+export const postsModule = defineResource(posts, { access: 'authenticated', ownedBy: 'authorId' });
+
+// bin/server.ts
+runServer(app);
+```
+
+## Milestones
+
+| #   | Milestone                              | Depends on | Size |
+| --- | -------------------------------------- | ---------- | ---- |
+| M8  | App foundation (DX core)               | —          | L    |
+| M9  | Generic resources and typed registries | M8         | L    |
+| M10 | Missing drivers and contract-only pkgs | M8         | M    |
+| M11 | New packages                           | M9         | XL   |
+| M12 | Production readiness                   | M8         | M    |
+
+### M8 — App foundation
+
+1. **Container overrides.**
+   - Add `override(token, factory)`, `extend(token, decorate)` and `bindDefault`.
+   - An app override wins no matter what order bindings are registered in.
+2. **Typed providers.**
+   - Providers declare `provides` and `requires`.
+   - Boot order is topological.
+   - A missing or circular requirement fails at boot.
+3. **`Register` augmentation.**
+   - Add the interface and its helper types.
+   - Type the `CONFIG` token.
+   - Make the `config()` helper path-typed.
+4. **`defineConfig`.**
+   - Composes package config slices.
+   - Each slice declares its own env keys, so the env mapping is generated.
+5. **`defineApp` with presets.**
+   - The `api` preset installs database, cache, queue, events, logging and mail.
+   - Add the runners `runServer`, `runWorker`, `runScheduler` and `runCli`.
+   - `@framework/http` owns the `/health` and `/health/ready` routes.
+6. **`defineModule`.**
+   - Bundles a module's providers, routes, OpenAPI, jobs, listeners, schedules
+     and seeders.
+   - A module registers in one place.
+7. **Template rewrite.** Move `create`, `template/`, `apps/playground`, the
+   generator markers and the docs onto the new APIs.
+   - Gate: a generated app has ≤ 5 files of non-business code.
+
+### M9 — Generic resources and typed registries
+
+1. **`defineResource(table, opts)`.**
+   - Produces the repository, service, controller, routes, OpenAPI and policy.
+   - Every part can be replaced through options.
+   - Hono RPC types are preserved.
+   - `make:crud` gains `--compact`; today's layout stays as `--expanded`.
+2. `ownedBy` is limited to `keyof TEntity`, and the service container option is typed.
+3. Generic repository mixin constructors, with no `as unknown as` overrides.
+4. **Auth generic over the user type:** `createAuthProvider<TConfig, TUser>({ usersTable, … })`.
+   - `Principal<TUser>`.
+   - Guard names are extensible.
+5. **Typed job, notification and event registries,** checked against `Register`.
+   - Notification channels are extensible through `defineChannel`.
+6. **CRUD depth (old M4):**
+   - Relations, with an allowlisted `?include=`.
+   - `pgEnum` mapped to `z.enum`.
+   - `jsonb` with a schema.
+   - Filter/sort DSL in OpenAPI.
+
+### M10 — Missing drivers and contract-only packages
+
+1. SMTP transport, plus an `SmsTransport` contract with Twilio/Vonage drivers (old M6).
+2. S3, R2 and MinIO storage, validated against MinIO in compose (old M6).
+3. Streaming XLSX import/export and a pluggable PDF renderer (old M6).
+4. **`@framework/socialite` runtime.**
+   - Google, GitHub and Apple drivers, plus `defineSocialDriver`.
+   - Account linking to the generic user.
+5. **`@framework/observatory` runtime.**
+   - Watchers backed by a Postgres store, with a protected JSON API.
+   - Covers the `observatory:*` commands.
+
+### M11 — New packages
+
+Every new package follows the same pattern:
+
+- Generic contracts.
+- A `Register` key.
+- A `create<X>Provider`.
+- Drivers selected by config, including a memory driver for tests.
+- A `make:*` generator, a guide page and a status row.
+
+1. **`@framework/authorization`.**
+   - `defineAbility<TSubject, TActor>`, with `can` / `authorize`.
+   - Roles and permissions typed by `Register['permissions']`.
+   - Config-backed and DB-backed stores.
+2. **`@framework/tenancy`.**
+   - Subdomain, header, path and custom resolvers.
+   - Row-scoped or schema-per-tenant data.
+   - Tenant-prefixed cache, queue, storage and search keys.
+   - `tenant:*` commands.
+3. **`@framework/flags` and `@framework/settings`.**
+   - Typed flags that resolve global → tenant → user, with percentage rollout.
+   - A typed runtime settings store.
+4. **`@framework/i18n`.**
+   - Typed message keys and locale middleware.
+   - `t()` in the request scope.
+   - Localized validation and notifications.
+5. **`@framework/billing`.**
+   - Stripe and Paddle drivers.
+   - A `Billable` mixin.
+   - Subscriptions, plans and trials.
+   - Signed, idempotent webhooks that emit typed events.
+
+### M12 — Production readiness
+
+1. OpenTelemetry traces from HTTP through service, repository and job, plus metrics (old M7).
+2. `/health/ready` with per-package checks registered through `defineHealthCheck`.
+3. `idempotency` middleware keyed on `Idempotency-Key`.
+4. An ADR on the Node runtime.
+5. Release gates:
+   - A clean-room `create` smoke test in CI.
+   - A CI check that every CLI command has a status row.
+   - Publishing the split repos.
+   - The `bun create owner/repo` path.
+
+## Sequencing
+
+```text
+M8 ─> M9 ─┬─> M11.1 authorization ─> M11.2 tenancy ─> M11.5 billing
+          └─> M11.3 flags/settings, M11.4 i18n (parallel)
+M10 and M12 run in parallel after M8
+```
+
+## First pull requests
+
+1. `feat(core)`: container `override`, `extend` and `bindDefault`.
+2. `feat(core)`: provider `provides` / `requires` with topological boot order.
+3. `feat(core)`: the `Register` interface, a typed `CONFIG` and the path-typed `config()`.
+4. `feat(core)`: `defineConfig` with env metadata per slice.
+5. `feat(http)`: health and readiness routes and the process runners.
+6. `feat(core)`: `defineApp` with presets, and `defineModule`.
+7. `refactor(template)`: `create`, `template/` and the playground on the new APIs.
+
+## Rules per item
+
+- TDD against real Postgres and Redis where touched. Type-level tests
+  (`@ts-expect-error`) cover every generic or augmentation claim.
+- No `unknown`/`any` in public types (`JsonValue`/`ServiceValue` discipline).
+- Update [status.md](status.md) and `CHANGELOG.md` in the same PR. Use
+  conventional commits and keep to one sub-item per PR.
