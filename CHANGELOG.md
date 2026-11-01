@@ -23,6 +23,12 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   boot before any provider registers. The cache provider declares its tokens
   and auth uses `RATE_LIMITER` optionally, so the "cache must stay above auth"
   rule in generated apps and the playground is gone.
+- `Register`, an augmentable app-wide type registry in `@framework/core`.
+  Declaring `Register.config` types the `CONFIG` token and the global
+  `config()` helper: dotted paths autocomplete, values are exact, and unknown
+  paths or mismatched fallbacks fail to compile. Unaugmented code keeps today's
+  types. A fixture app compiled by its own `tsc` program covers the contract
+  (`packages/support/tests/register.test.ts`).
 
 ### Changed
 
