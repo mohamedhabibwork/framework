@@ -44,6 +44,11 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
     can no longer stall readiness.
 - `runServer` in `@framework/http`: serves a kernel with graceful SIGTERM/SIGINT
   draining, plus an idempotent `stop()` that shuts the application down.
+- `defineModule` and `defineApp` in `@framework/http`. A module bundles its
+  providers, routes and OpenAPI operations, so it registers in one place
+  instead of three. `defineApp` builds the application and kernel, mounts
+  `/health` and every module under the API prefix, applies `overrides` before
+  registration, and refuses duplicate modules or routes.
 
 ### Changed
 
