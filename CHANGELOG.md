@@ -35,6 +35,15 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   It exposes `load()` (env file < process env < defaults), `parse(env)`,
   `envKeys`, and `InferConfig` for the app's config type. Generated apps
   move to it with the M8 template rewrite.
+- New health checks:
+  - `defineHealthCheck` and `runHealthChecks` in core.
+  - Ready-made `databaseHealthCheck`, `cacheHealthCheck` and `queueHealthCheck`
+    probes in their packages.
+  - `healthRoutes({ checks, timeoutMs })` in `@framework/http`. Probes run
+    concurrently with a deadline each (2s by default), so a hung dependency
+    can no longer stall readiness.
+- `runServer` in `@framework/http`: serves a kernel with graceful SIGTERM/SIGINT
+  draining, plus an idempotent `stop()` that shuts the application down.
 
 ### Changed
 
@@ -44,6 +53,13 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   `/404.html`); Dokploy rebuilds it on every push to `main`. The Cloudflare
   adapter, `wrangler.jsonc`, the `docs:deploy` script and the wrangler CI
   deploy job are removed — CI now builds the image instead.
+
+### Fixed
+
+- `GET /health/ready` in generated apps and the playground reported the database
+  as `ok` while it was down: `pingDatabase` returns `false` instead of throwing.
+  The route now uses `databaseHealthCheck`. The Redis-backed check is renamed
+  from `redis` to `cache`.
 
 ## [0.2.0] — 2026-10-27
 
