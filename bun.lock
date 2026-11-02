@@ -278,6 +278,7 @@
       "version": "0.2.0",
       "dependencies": {
         "@framework/cache": "workspace:*",
+        "@framework/cli": "workspace:*",
         "@framework/core": "workspace:*",
         "@framework/crud": "workspace:*",
         "@framework/database": "workspace:*",
@@ -286,8 +287,10 @@
         "@framework/logging": "workspace:*",
         "@framework/mail": "workspace:*",
         "@framework/notifications": "workspace:*",
+        "@framework/openapi": "workspace:*",
         "@framework/queue": "workspace:*",
         "@framework/storage": "workspace:*",
+        "hono": "4.13.13",
       },
     },
     "packages/prompts": {

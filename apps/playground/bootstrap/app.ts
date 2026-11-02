@@ -1,7 +1,6 @@
 import { AUTH_SERVICE, authActorResolver, defineAuthRoutes, requireAbility } from '@framework/auth';
 import type { Application } from '@framework/core';
-import { dataOperations } from '@framework/crud';
-import { defineApp, defineModule } from '@framework/http';
+import { defineApp, defineModule, requireAuth } from '@framework/http';
 import { generateOpenApiDocument, type Operation } from '@framework/openapi';
 import { apiPreset } from '@framework/presets';
 import { workflowProvider, workflowRoutes } from '@framework/workflow';
@@ -9,24 +8,16 @@ import { csrf } from 'hono/csrf';
 import { authOperations } from '../app/auth/openapi';
 import { notificationDeliveryJob } from '../app/jobs';
 import { productExportJob, productImportJob } from '../app/jobs/products.jobs';
-import { listenersProvider } from '../app/listeners/listeners.provider';
+import { listeners } from '../app/listeners';
 import { productsModule } from '../app/modules/products';
 import { notifications } from '../app/notifications';
 import { authProvider } from '../app/providers/auth.provider';
 import { eventsProvider, WEBSOCKET_GATEWAY } from '../app/providers/events.provider';
 import { workflowsProvider } from '../app/workflows';
 import type { AppConfig } from '../config';
-import { dataRoutes } from '../routes/data';
 import { createMiddleware } from './middleware';
 
 export type PlaygroundApplication = Application<AppConfig>;
-
-/** Queued import/export endpoints under /api/v1/data (see `routes/data.ts`). */
-const dataModule = defineModule<AppConfig, Operation>({
-  name: 'data',
-  routes: { path: '/data', app: dataRoutes },
-  operations: dataOperations({ mount: '/api/v1/data', resources: ['products'] }),
-});
 
 /** Documents the auth endpoints; their routes need the config, so `routes` below mounts them. */
 const authModule = defineModule<AppConfig, Operation>({ name: 'auth', operations: authOperations });
@@ -37,7 +28,14 @@ const authModule = defineModule<AppConfig, Operation>({ name: 'auth', operations
  */
 const api = apiPreset<AppConfig>({
   events: eventsProvider,
-  data: { imports: [productImportJob], exports: [productExportJob] },
+  listeners,
+  data: {
+    imports: [productImportJob],
+    exports: [productExportJob],
+    resources: ['products'],
+    // Dispatching jobs and reading artifacts is authenticated-only.
+    authorize: requireAuth(),
+  },
   notifications: { definitions: notifications, job: notificationDeliveryJob },
 });
 
@@ -65,7 +63,6 @@ export const app = defineApp<AppConfig, Operation>({
   middleware: (config) => createMiddleware(config).resolve(['api']),
   providers: [
     ...api.providers,
-    listenersProvider,
     authProvider,
     // @framework:providers
     workflowProvider,
@@ -75,7 +72,7 @@ export const app = defineApp<AppConfig, Operation>({
     // @framework:modules
     authModule,
     productsModule,
-    dataModule,
+    ...api.modules,
   ],
   // Liveness never touches dependencies; readiness probes the database, cache and queue (2s each).
   health: api.health,

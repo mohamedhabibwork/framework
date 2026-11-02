@@ -114,10 +114,14 @@ runServer(app);
      `bin/worker.ts` uses `runWorker`, and the playground's `bin/scheduler.ts`
      uses `runScheduler`.
      `apiPreset` (`@framework/presets`) absorbs the nine provider wrappers.
-   - Remaining: the gate is not met. A generated app has 16 TypeScript files
-     (down from 25). Beyond `bootstrap/app.ts`, `config/index.ts` and the three
-     `bin/` entry points, candidates to absorb are `bin/cli.ts` (134 lines),
-     `bootstrap/middleware.ts`, `routes/data.ts` and the listeners provider.
+     `apiPreset` also takes the listeners and data routes, and `apiProject`
+     (`@framework/presets/cli`) shrinks `bin/cli.ts` from 134 lines to 31.
+   - Remaining: the gate is not met. A generated app has 14 TypeScript files
+     (down from 25). Of those, `app/jobs`, `app/notifications`, `app/listeners`,
+     `database/schema` and `database/seeders` are registries for your own code,
+     and two are tests. The wiring left is `bootstrap/app.ts`,
+     `bootstrap/middleware.ts`, `config/index.ts`, `drizzle.config.ts` and the
+     three `bin/` entry points.
 
 ### M9 — Generic resources and typed registries
 

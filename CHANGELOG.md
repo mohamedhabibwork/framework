@@ -44,7 +44,12 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
     can no longer stall readiness.
 - `@framework/presets`: `apiPreset()` returns the providers and readiness probes
   a typical API needs. Pass a provider to replace a part, or `false` to remove
-  it. `QUEUE` now has its own `queue` provider rather than living in `data`.
+  it. `QUEUE` now has its own `queue` provider rather than living in `data`. It
+  also subscribes `listeners` and returns the import/export routes as `modules`,
+  denied in production until you pass `data: { authorize }`.
+- `apiProject` in `@framework/presets/cli` fills the conventional CLI adapter, so
+  a generated `bin/cli.ts` is 31 lines instead of 134. `overrides` changes any
+  of it.
 - `runWorker` in `@framework/queue` and `runScheduler` in `@framework/scheduler`:
   consume a queue with graceful SIGTERM/SIGINT drain. `extensions` adds
   subsystems on the same queue, such as `WorkflowEngine`. `bin/worker.ts` uses

@@ -1,16 +1,12 @@
-import type { DomainEvent } from '@framework/events';
+import type { Listener } from '@framework/presets';
+
+export type { Listener };
 
 /**
- * A listener reacts to one event channel. The listeners provider subscribes
+ * A listener reacts to one event channel. `apiPreset` subscribes
  * every entry below the marker when the application boots. Delivery is
  * at-least-once: keep handlers idempotent. Add listeners with `make:listener`.
  */
-export interface Listener {
-  readonly name: string;
-  readonly channel: string;
-  readonly handle: (event: DomainEvent) => void | Promise<void>;
-}
-
 export const listeners: Listener[] = [
   // @framework:listeners
 ];
