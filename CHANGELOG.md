@@ -11,6 +11,16 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- Typed registries through `Register`. `queue.dispatch('send-invoice', payload, ctx)`
+  works by name once the queue has `jobs` (`QueueOptions`, `createQueueProvider`,
+  `apiPreset`), and `Register.jobs` checks the name and payload. `send` and
+  `sendQueued` are checked against `Register.notifications`. `createDomainEvent`
+  payloads and `bus.subscribe` handlers are checked against `Register.events`;
+  events it doesn't list stay open. Unaugmented code is unchanged.
+- `defineChannel` adds a custom notification channel with the built-in channels'
+  record, status and queued retries; `Register.channels` extends
+  `NotificationChannel`. A definition using an unregistered channel fails when
+  the service is created.
 - Auth is generic over the user type. `pgTable('users', { ...authUserColumns(), … })`
   plus `createAuthProvider({ usersTable })` adds columns to users, and declaring
   `Register.user` types `AUTH_SERVICE`, `USER_PROVIDER`, `authPrincipal` and
@@ -84,6 +94,9 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Changed
 
+- `JobList` and `AnyNotificationDefinition` no longer use `any`. A custom
+  `EventBus` needs a generic `subscribe`, as `MemoryEventBus` has, once an app
+  declares `Register.events`.
 - `BaseRepository` and `BaseSoftDeletableRepository` no longer re-declare every
   method with casts. Subclass hooks and helpers such as `beforeCreate`,
   `beforeUpdate` and `before` now see the concrete table; they used to see

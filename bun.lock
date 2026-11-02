@@ -292,6 +292,9 @@
         "@framework/storage": "workspace:*",
         "hono": "4.13.13",
       },
+      "devDependencies": {
+        "zod": "4.6.7",
+      },
     },
     "packages/prompts": {
       "name": "@framework/prompts",

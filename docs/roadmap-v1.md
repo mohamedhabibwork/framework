@@ -152,6 +152,12 @@ runServer(app);
      (`packages/auth/tests/generic-user.test.ts`).
 5. **Typed job, notification and event registries,** checked against `Register`.
    - Notification channels are extensible through `defineChannel`.
+   - Done: `queue.dispatch('name', payload, ctx)`, `send` and `sendQueued` are
+     checked against `Register.jobs` and `Register.notifications`, and event
+     payloads against `Register.events`. `JobList` and
+     `AnyNotificationDefinition` no longer use `any`
+     (`packages/notifications/tests/registries.test.ts`,
+     `packages/events/tests/register.test.ts`).
 6. **CRUD depth (old M4):**
    - Relations, with an allowlisted `?include=`.
    - `pgEnum` mapped to `z.enum`.
