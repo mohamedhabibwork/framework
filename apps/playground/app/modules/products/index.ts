@@ -1,14 +1,7 @@
-import { defineModule } from '@framework/http';
-import type { Operation } from '@framework/openapi';
-import type { AppConfig } from '../../../config';
-import { productOperations } from './openapi';
-import { productsProvider } from './provider';
-import { productRoutes } from './routes';
-
-export type * from './dto/product.dto';
-export { PRODUCT_CONTROLLER, PRODUCT_REPOSITORY, PRODUCT_SERVICE, productsProvider } from './provider';
-export { productRoutes } from './routes';
-export {
+import { defineResource } from '@framework/crud';
+import type { z } from 'zod/v4';
+import { products } from '../../../database/schema/products';
+import {
   createProductSchema,
   listProductsQuerySchema,
   productIdParamSchema,
@@ -16,10 +9,25 @@ export {
   updateProductSchema,
 } from './schemas';
 
-/** The module's single registration point: listed in `defineApp({ modules })`. */
-export const productsModule = defineModule<AppConfig, Operation>({
-  name: 'products',
-  providers: [productsProvider],
-  routes: { path: '/products', app: productRoutes },
-  operations: productOperations,
+export * from './schemas';
+export type CreateProductInput = z.input<typeof createProductSchema>;
+
+/**
+ * The whole module: listed in `defineApp({ modules })`. Pass `repository`,
+ * `service`, `controller` or `toResponse` to replace a layer.
+ */
+export const productsModule = defineResource(products, {
+  access: 'public',
+  name: 'Product',
+  path: '/products',
+  schemas: {
+    create: createProductSchema,
+    update: updateProductSchema,
+    response: productResponseSchema,
+    query: listProductsQuerySchema,
+    param: productIdParamSchema,
+  },
 });
+
+/** Hono RPC clients type against this: `hc<typeof productRoutes>('/api/v1/products')`. */
+export const productRoutes = productsModule.routes.app;

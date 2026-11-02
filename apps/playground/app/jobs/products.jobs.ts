@@ -1,8 +1,6 @@
 import { EXPORT_STORE } from '@framework/presets';
 import { defineExportJob, defineImportJob } from '@framework/crud';
-import { PRODUCT_REPOSITORY } from '../modules/products/provider';
-import { toProductResponse } from '../modules/products/responses/product.response';
-import { createProductSchema } from '../modules/products/schemas';
+import { createProductSchema, productsModule } from '../modules/products';
 
 /**
  * Queued import/export for the products module. The repository and export
@@ -13,15 +11,15 @@ import { createProductSchema } from '../modules/products/schemas';
  */
 export const productImportJob = defineImportJob({
   resource: 'products',
-  repository: PRODUCT_REPOSITORY,
+  repository: productsModule.tokens.repository,
   rowSchema: createProductSchema,
   columns: ['name', 'price'],
 });
 
 export const productExportJob = defineExportJob({
   resource: 'products',
-  repository: PRODUCT_REPOSITORY,
+  repository: productsModule.tokens.repository,
   columns: ['id', 'name', 'price'],
-  serialize: toProductResponse,
+  serialize: productsModule.toResponse,
   storeToken: EXPORT_STORE,
 });

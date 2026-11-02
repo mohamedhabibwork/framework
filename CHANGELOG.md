@@ -47,6 +47,9 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   operations as a module for `defineApp`, with its routes typed for
   `hc<typeof resource.routes.app>`. `hidden` columns stay out of responses and
   writes, and `ownedBy` accepts only real columns. Any part can be replaced.
+- `make:crud --compact` generates one `defineResource` call plus `schemas.ts`,
+  and passes the same generated endpoint suite. `--expanded` is the default.
+  The playground's products module moved to it, from 14 files to 2 plus tests.
 - `@framework/presets`: `apiPreset()` returns the providers and readiness probes
   a typical API needs. Pass a provider to replace a part, or `false` to remove
   it. `QUEUE` now has its own `queue` provider rather than living in `data`. It
