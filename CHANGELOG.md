@@ -11,6 +11,14 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- Auth is generic over the user type. `pgTable('users', { ...authUserColumns(), … })`
+  plus `createAuthProvider({ usersTable })` adds columns to users, and declaring
+  `Register.user` types `AUTH_SERVICE`, `USER_PROVIDER`, `authPrincipal` and
+  `c.var.principal.user`. Unaugmented code keeps `UserRecord`. The provider also
+  takes `userProvider`, `hasher` and `stores`. Custom guards are passed as
+  `guards`, named through `Register.guards`, and validated in config with
+  `authGuardsSchema`. A guard listed without an implementation, or a users table
+  not named `users`, fails boot.
 - `Container.override(token, factory)` replaces any binding app-wide. It wins over
   `bind` regardless of registration order and inherits the replaced lifetime.
   `Container.extend(token, decorate)` stacks decorators on whatever a token

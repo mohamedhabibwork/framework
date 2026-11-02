@@ -145,6 +145,11 @@ runServer(app);
 4. **Auth generic over the user type:** `createAuthProvider<TConfig, TUser>({ usersTable, … })`.
    - `Principal<TUser>`.
    - Guard names are extensible.
+   - Done: `usersTable`, `userProvider`, `hasher`, `stores` and `guards` options,
+     with `Register.user` and `Register.guards` flowing through the DI tokens and
+     `c.var.principal.user`. A custom table must be named `users`, because the
+     auth tables' foreign keys point there
+     (`packages/auth/tests/generic-user.test.ts`).
 5. **Typed job, notification and event registries,** checked against `Register`.
    - Notification channels are extensible through `defineChannel`.
 6. **CRUD depth (old M4):**
