@@ -1,25 +1,19 @@
 import { AUTH_SERVICE, authActorResolver, defineAuthRoutes, requireAbility } from '@framework/auth';
-import { cacheHealthCheck } from '@framework/cache';
 import type { Application } from '@framework/core';
 import { dataOperations } from '@framework/crud';
-import { databaseHealthCheck } from '@framework/database';
 import { defineApp, defineModule } from '@framework/http';
 import { generateOpenApiDocument, type Operation } from '@framework/openapi';
-import { queueHealthCheck } from '@framework/queue';
+import { apiPreset } from '@framework/presets';
 import { workflowProvider, workflowRoutes } from '@framework/workflow';
 import { csrf } from 'hono/csrf';
 import { authOperations } from '../app/auth/openapi';
+import { notificationDeliveryJob } from '../app/jobs';
+import { productExportJob, productImportJob } from '../app/jobs/products.jobs';
 import { listenersProvider } from '../app/listeners/listeners.provider';
 import { productsModule } from '../app/modules/products';
+import { notifications } from '../app/notifications';
 import { authProvider } from '../app/providers/auth.provider';
-import { cacheProvider } from '../app/providers/cache.provider';
-import { dataProvider } from '../app/providers/data.provider';
-import { databaseProvider } from '../app/providers/database.provider';
 import { eventsProvider, WEBSOCKET_GATEWAY } from '../app/providers/events.provider';
-import { loggingProvider } from '../app/providers/logging.provider';
-import { mailProvider } from '../app/providers/mail.provider';
-import { notificationsProvider } from '../app/providers/notifications.provider';
-import { storageProvider } from '../app/providers/storage.provider';
 import { workflowsProvider } from '../app/workflows';
 import type { AppConfig } from '../config';
 import { dataRoutes } from '../routes/data';
@@ -36,6 +30,16 @@ const dataModule = defineModule<AppConfig, Operation>({
 
 /** Documents the auth endpoints; their routes need the config, so `routes` below mounts them. */
 const authModule = defineModule<AppConfig, Operation>({ name: 'auth', operations: authOperations });
+
+/**
+ * The standard API stack. The playground replaces `events` with its own
+ * provider, which adds the realtime hub and workflow channels.
+ */
+const api = apiPreset<AppConfig>({
+  events: eventsProvider,
+  data: { imports: [productImportJob], exports: [productExportJob] },
+  notifications: { definitions: notifications, job: notificationDeliveryJob },
+});
 
 /**
  * The application, registered in one place. Generators add providers and
@@ -60,16 +64,9 @@ export const app = defineApp<AppConfig, Operation>({
   }),
   middleware: (config) => createMiddleware(config).resolve(['api']),
   providers: [
-    databaseProvider,
-    eventsProvider,
+    ...api.providers,
     listenersProvider,
-    cacheProvider,
     authProvider,
-    dataProvider,
-    storageProvider,
-    loggingProvider,
-    mailProvider,
-    notificationsProvider,
     // @framework:providers
     workflowProvider,
     workflowsProvider,
@@ -81,7 +78,7 @@ export const app = defineApp<AppConfig, Operation>({
     dataModule,
   ],
   // Liveness never touches dependencies; readiness probes the database, cache and queue (2s each).
-  health: { checks: [databaseHealthCheck(), cacheHealthCheck(), queueHealthCheck()] },
+  health: api.health,
   routes: (http, application) => {
     const { config, container } = application;
     // @framework:app-routes

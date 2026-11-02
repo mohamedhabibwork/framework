@@ -106,3 +106,7 @@
 	path = apps/docs
 	url = https://github.com/mohamedhabibwork/framework-docs.git
 	branch = main
+[submodule "packages/presets"]
+	path = packages/presets
+	url = https://github.com/mohamedhabibwork/framework-presets.git
+	branch = main

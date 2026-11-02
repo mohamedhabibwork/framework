@@ -27,6 +27,7 @@
     "@framework/mail": "workspace:*",
     "@framework/notifications": "workspace:*",
     "@framework/openapi": "workspace:*",
+    "@framework/presets": "workspace:*",
     "@framework/queue": "workspace:*",
     "@framework/scheduler": "workspace:*",
     "@framework/storage": "workspace:*",

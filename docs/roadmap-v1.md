@@ -113,7 +113,11 @@ runServer(app);
      hand-written env mapping.
      `bin/worker.ts` uses `runWorker`, and the playground's `bin/scheduler.ts`
      uses `runScheduler`.
-   - Remaining: presets that absorb the provider wrappers.
+     `apiPreset` (`@framework/presets`) absorbs the nine provider wrappers.
+   - Remaining: the gate is not met. A generated app has 16 TypeScript files
+     (down from 25). Beyond `bootstrap/app.ts`, `config/index.ts` and the three
+     `bin/` entry points, candidates to absorb are `bin/cli.ts` (134 lines),
+     `bootstrap/middleware.ts`, `routes/data.ts` and the listeners provider.
 
 ### M9 — Generic resources and typed registries
 

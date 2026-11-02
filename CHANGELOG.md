@@ -42,6 +42,9 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   - `healthRoutes({ checks, timeoutMs })` in `@framework/http`. Probes run
     concurrently with a deadline each (2s by default), so a hung dependency
     can no longer stall readiness.
+- `@framework/presets`: `apiPreset()` returns the providers and readiness probes
+  a typical API needs. Pass a provider to replace a part, or `false` to remove
+  it. `QUEUE` now has its own `queue` provider rather than living in `data`.
 - `runWorker` in `@framework/queue` and `runScheduler` in `@framework/scheduler`:
   consume a queue with graceful SIGTERM/SIGINT drain. `extensions` adds
   subsystems on the same queue, such as `WorkflowEngine`. `bin/worker.ts` uses
@@ -72,6 +75,12 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   `paths.app` keep the three-file registration; `paths.apiRoutes` and
   `paths.openapi` are now optional.
 - Generator plans compose several updates to the same file into one change.
+- Generated apps and `template/` install their stack with `apiPreset`, removing
+  nine files from `app/providers/`. The playground does too, keeping its own
+  `events` and `auth` providers. `WEBSOCKET_GATEWAY`, `DATA_PORTER` and
+  `EXPORT_STORE` now come from `@framework/presets`. The playground's cache
+  config moved to `cache.redis.{url,prefix}`. `cache:clear` and the storage
+  commands accept a providers file that uses `apiPreset`.
 - Generated apps, `template/` and the playground declare `config/index.ts` with
   `defineConfig` and `fromEnv`. `configSchema` and `mapEnvironment` are replaced
   by `appConfig`; tests call `appConfig.parse(env)`. An unset
@@ -88,6 +97,13 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Fixed
 
+- The Redis cache driver fails fast during an outage and recovers without a
+  restart. Commands used to queue for about 31 seconds against an unreachable
+  Redis, stalling every throttled request including `/health/live`, and the
+  client then stayed failed even after Redis returned. They now reject with
+  `CACHE_UNAVAILABLE` in under a second on a refused connection, or about 2
+  seconds per attempt on a host that never answers, and the next command opens
+  a new connection. Applies to cache, locks and rate limiting.
 - `GET /health/ready` in generated apps and the playground reported the database
   as `ok` while it was down: `pingDatabase` returns `false` instead of throwing.
   The route now uses `databaseHealthCheck`. The Redis-backed check is renamed

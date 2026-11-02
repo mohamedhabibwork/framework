@@ -58,7 +58,7 @@ export const project = defineProject({
     const cacheConfig = (config as AppConfig).cache;
     const cache =
       cacheConfig.driver === 'redis'
-        ? new RedisCache({ url: cacheConfig.url, prefix: cacheConfig.prefix })
+        ? new RedisCache({ url: cacheConfig.redis.url, prefix: cacheConfig.redis.prefix })
         : new MemoryCache();
     return {
       driver: cacheConfig.driver,

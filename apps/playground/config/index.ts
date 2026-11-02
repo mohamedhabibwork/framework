@@ -7,13 +7,13 @@ import { z } from 'zod/v4';
 const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
 
 /**
- * Kit-backed subsystem sections (see providers in app/providers/):
- * - `cache` feeds `cacheProvider` (@framework/cache): the default namespace
+ * Kit-backed subsystem sections (installed by `apiPreset` in bootstrap/app.ts):
+ * - `cache` feeds the cache provider (@framework/cache): the default namespace
  *   cache, lock store and rate limiter. `memory` is per-process (development);
  *   `redis` shares state across instances and defaults to REDIS_URL.
- * - `logging` feeds `loggingProvider` (@framework/logging): console driver at
+ * - `logging` feeds the logging provider (@framework/logging): console driver at
  *   info level by default; `file` requires LOG_FILE_PATH.
- * - `storage` feeds `storageProvider` (@framework/storage): one local disk
+ * - `storage` feeds the storage provider (@framework/storage): one local disk
  *   rooted under the playground directory (created on first use, never by
  *   `storage:check`).
  */
@@ -91,8 +91,10 @@ export const appConfig = defineConfig({
   }),
   cache: z.object({
     driver: fromEnv('CACHE_DRIVER', z.enum(['memory', 'redis']).default('redis')),
-    url: fromEnv(['CACHE_URL', 'REDIS_URL'], z.string().min(1).default('redis://127.0.0.1:6379')),
-    prefix: fromEnv('CACHE_PREFIX', z.string().min(1).default('playground')),
+    redis: z.object({
+      url: fromEnv(['CACHE_URL', 'REDIS_URL'], z.string().min(1).default('redis://127.0.0.1:6379')),
+      prefix: fromEnv('CACHE_PREFIX', z.string().min(1).default('playground')),
+    }),
   }),
   // The package's schema, with its defaults and file-driver check, plus env bindings.
   logging: loggingConfigSchema.safeExtend({

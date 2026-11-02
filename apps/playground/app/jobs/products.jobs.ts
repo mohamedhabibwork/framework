@@ -1,8 +1,8 @@
+import { EXPORT_STORE } from '@framework/presets';
 import { defineExportJob, defineImportJob } from '@framework/crud';
 import { PRODUCT_REPOSITORY } from '../modules/products/provider';
 import { toProductResponse } from '../modules/products/responses/product.response';
 import { createProductSchema } from '../modules/products/schemas';
-import { EXPORT_STORE } from '../providers/data.tokens';
 
 /**
  * Queued import/export for the products module. The repository and export

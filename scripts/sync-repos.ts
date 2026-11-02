@@ -420,6 +420,7 @@ All \`@framework/*\` packages are linked directly to their dedicated GitHub repo
 - [\`@framework/queue\`](https://github.com/${OWNER}/framework-queue)
 - [\`@framework/cache\`](https://github.com/${OWNER}/framework-cache)
 - [\`@framework/logging\`](https://github.com/${OWNER}/framework-logging)
+- [\`@framework/presets\`](https://github.com/${OWNER}/framework-presets)
 - [\`@framework/storage\`](https://github.com/${OWNER}/framework-storage)
 - [\`@framework/openapi\`](https://github.com/${OWNER}/framework-openapi)
 - [\`@framework/support\`](https://github.com/${OWNER}/framework-support)

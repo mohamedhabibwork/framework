@@ -76,6 +76,7 @@ packages/auth        sessions, API tokens, verification, TOTP, JWT guards
 packages/events      event bus (in-memory + Redis pub/sub), WebSocket realtime hub
 packages/queue       BullMQ queue manager, batches, worker
 packages/workflow    durable multi-stage workflows with saga compensation
+packages/presets     ready-made provider stacks, every part replaceable
 packages/scheduler   cron registry, distributed locking, scheduled dispatch
 packages/search      full-text search (memory + PostgreSQL drivers)
 packages/oauth-server OAuth 2.0 / OIDC authorization server
@@ -159,6 +160,7 @@ Every package in `packages/*` is also synced to its own repository:
 | `@framework/openapi`       | [`framework-openapi`](https://github.com/mohamedhabibwork/framework-openapi)             |
 | `@framework/prompts`       | [`framework-prompts`](https://github.com/mohamedhabibwork/framework-prompts)             |
 | `@framework/queue`         | [`framework-queue`](https://github.com/mohamedhabibwork/framework-queue)                 |
+| `@framework/presets`       | [`framework-presets`](https://github.com/mohamedhabibwork/framework-presets)             |
 | `@framework/scheduler`     | [`framework-scheduler`](https://github.com/mohamedhabibwork/framework-scheduler)         |
 | `@framework/search`        | [`framework-search`](https://github.com/mohamedhabibwork/framework-search)               |
 | `@framework/socialite`     | [`framework-socialite`](https://github.com/mohamedhabibwork/framework-socialite)         |

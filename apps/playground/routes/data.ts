@@ -1,7 +1,7 @@
 import { EXECUTION_CONTEXT } from '@framework/core';
 import { importExportRoutes } from '@framework/crud';
 import { requireAuth, resolve } from '@framework/http';
-import { DATA_PORTER } from '../app/providers/data.tokens';
+import { DATA_PORTER } from '@framework/presets';
 
 /**
  * Queued import/export endpoints (documented via `dataOperations` in
