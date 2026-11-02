@@ -11,6 +11,8 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- The `s3`, `r2` and `minio` storage drivers are now tested against a real MinIO
+  server in `deployment/compose.yaml`, so `bun run db:up` starts one on port 59000.
 - `MAIL_DRIVER=smtp` delivers through `SmtpMailTransport` (nodemailer, pooled).
   TLS and certificate checks are on by default, and `smtpConfigSection()` reads
   `MAIL_SMTP_*`. `smsChannel` adds SMS as a notification channel over an

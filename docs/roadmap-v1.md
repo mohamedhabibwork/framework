@@ -175,6 +175,9 @@ runServer(app);
      tests, and `smsChannel` with `twilioSms` and `vonageSms`. The SMS drivers are
      tested against a local stand-in for each API, not the live providers.
 2. S3, R2 and MinIO storage, validated against MinIO in compose (old M6).
+   - Done: the `s3`, `r2` and `minio` drivers pass one disk contract against MinIO in
+     compose (`packages/storage/tests/s3-compatible.test.ts`). The storagekit drivers
+     needed no changes. `r2` hasn't run against Cloudflare.
 3. Streaming XLSX import/export and a pluggable PDF renderer (old M6).
 4. **`@framework/socialite` runtime.**
    - Google, GitHub and Apple drivers, plus `defineSocialDriver`.

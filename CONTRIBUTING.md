@@ -4,7 +4,7 @@
 
 ```sh
 bun install
-bun run db:up            # local Postgres (54329) + Redis (63799)
+bun run db:up            # local Postgres (54329), Redis (63799) and MinIO (59000)
 cp .env.test.example .env.test
 bun run typecheck && bun run lint && bun run test
 ```

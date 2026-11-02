@@ -22,3 +22,12 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+  minio:
+    # Docker Hub no longer serves minio/minio. This image has no shell or curl for a healthcheck, so tests wait for it.
+    image: cgr.dev/chainguard/minio@sha256:0a01100085e30fb08d2f39e39c9f5c9d83a95707f220b007d813b690cd41622d
+    command: ['server', '/data']
+    environment:
+      MINIO_ROOT_USER: framework
+      MINIO_ROOT_PASSWORD: framework-secret
+    ports:
+      - '127.0.0.1:59000:9000'
