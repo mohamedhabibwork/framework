@@ -42,6 +42,11 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   - `healthRoutes({ checks, timeoutMs })` in `@framework/http`. Probes run
     concurrently with a deadline each (2s by default), so a hung dependency
     can no longer stall readiness.
+- `defineResource(table, options)` in `@framework/crud`: one call produces a CRUD
+  resource's repository, service, controller, routes, policy and OpenAPI
+  operations as a module for `defineApp`, with its routes typed for
+  `hc<typeof resource.routes.app>`. `hidden` columns stay out of responses and
+  writes, and `ownedBy` accepts only real columns. Any part can be replaced.
 - `@framework/presets`: `apiPreset()` returns the providers and readiness probes
   a typical API needs. Pass a provider to replace a part, or `false` to remove
   it. `QUEUE` now has its own `queue` provider rather than living in `data`. It

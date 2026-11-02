@@ -130,6 +130,10 @@ runServer(app);
    - Every part can be replaced through options.
    - Hono RPC types are preserved.
    - `make:crud` gains `--compact`; today's layout stays as `--expanded`.
+   - Done: `defineResource` in `@framework/crud`, proven against PostgreSQL with
+     a typed RPC client (`packages/crud/tests/define-resource.test.ts`).
+   - Remaining: `--compact`, and moving the playground's products module onto it.
+     CLI suites regenerate that module as their fixture, so they move with it.
 2. `ownedBy` is limited to `keyof TEntity`, and the service container option is typed.
 3. Generic repository mixin constructors, with no `as unknown as` overrides.
 4. **Auth generic over the user type:** `createAuthProvider<TConfig, TUser>({ usersTable, … })`.
