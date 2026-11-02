@@ -1,19 +1,17 @@
-import { installGracefulShutdown, redact } from '@framework/core';
-import { createApplication } from '../bootstrap/app';
-import { createHttp } from '../bootstrap/http';
+import { websocket } from '@framework/events';
+import { runServer } from '@framework/http';
+import { createApplication, createHttp } from '../bootstrap/app';
 import { loadAppConfig } from '../config';
 
 const config = await loadAppConfig();
 const application = await createApplication(config).boot();
-const http = createHttp(application);
 
-const server = Bun.serve({ hostname: config.http.host, port: config.http.port, fetch: http.fetch });
-console.error(`[server] listening on http://${server.hostname}:${server.port}`, redact({ app: config.app }));
-
-installGracefulShutdown({
-  timeoutMs: config.http.shutdownTimeoutMs,
-  onShutdown: async () => {
-    await server.stop();
-    await application.shutdown();
-  },
+// Drains in-flight requests on SIGTERM/SIGINT, then shuts the application down.
+await runServer({
+  application,
+  fetch: createHttp(application).fetch,
+  hostname: config.http.host,
+  port: config.http.port,
+  websocket,
+  shutdownTimeoutMs: config.http.shutdownTimeoutMs,
 });

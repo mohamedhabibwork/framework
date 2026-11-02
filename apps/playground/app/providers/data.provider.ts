@@ -9,7 +9,7 @@ import { DATA_PORTER, EXPORT_STORE } from './data.tokens';
  * Queued import/export: a BullMQ connection (lazy — connects on first use),
  * the local export artifact store, and the dispatcher behind `/api/v1/data`.
  * Add a module's jobs to the lists below (and its resource name to the
- * `dataOperations` call in `bootstrap/openapi.ts`) to opt it in.
+ * `dataOperations` call in `bootstrap/app.ts`) to opt it in.
  */
 export const dataProvider = defineProvider<AppConfig>({
   name: 'data',

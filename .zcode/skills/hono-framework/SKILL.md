@@ -21,7 +21,7 @@ bun run cli -- <command> --json     # machine-readable envelope: { command, stat
 
 Exit codes: `0` ok, `1` failure, `2` invalid usage, `3` unsupported capability, `130`
 interrupted. Exit `3` usually means a provider is missing from
-`apps/playground/bootstrap/providers.ts` (e.g. `cacheProvider`, `authProvider`) — that is a
+`apps/playground/bootstrap/app.ts` (e.g. `cacheProvider`, `authProvider`) — that is a
 text check, not a boot.
 
 An MCP server exposing these commands as tools ships in `packages/ai-mcp` (registered via

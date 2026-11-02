@@ -5,7 +5,7 @@ import { DATA_PORTER } from '../app/providers/data.tokens';
 
 /**
  * Queued import/export endpoints (documented via `dataOperations` in
- * `bootstrap/openapi.ts`):
+ * `bootstrap/app.ts`):
  *
  * ```text
  * POST /api/v1/data/import                 dispatch an import (CSV/JSON)

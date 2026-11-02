@@ -106,11 +106,12 @@ runServer(app);
 7. **Template rewrite.** Move `create`, `template/`, `apps/playground`, the
    generator markers and the docs onto the new APIs.
    - Gate: a generated app has ≤ 5 files of non-business code.
-   - Done: `create` and `template/` compose in one `bootstrap/app.ts` on
-     `defineApp`, `bin/server.ts` uses `runServer`, and `make:crud` / `make:auth`
-     register there (`paths.app`). Five wiring files are gone.
-   - Remaining: the playground, `defineConfig` in generated config, presets
-     that absorb the provider wrappers, and `runWorker` / `runScheduler`.
+   - Done: `create`, `template/` and the playground compose in one
+     `bootstrap/app.ts` on `defineApp`, `bin/server.ts` uses `runServer`, and
+     `make:crud` / `make:auth` register there (`paths.app`). Five wiring files
+     are gone.
+   - Remaining: `defineConfig` in generated config, presets that absorb the
+     provider wrappers, and `runWorker` / `runScheduler`.
 
 ### M9 — Generic resources and typed registries
 
