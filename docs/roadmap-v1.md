@@ -163,6 +163,10 @@ runServer(app);
    - `pgEnum` mapped to `z.enum`.
    - `jsonb` with a schema.
    - Filter/sort DSL in OpenAPI.
+   - Done on `defineResource`: `relations` with `belongsTo` and `hasMany`,
+     `filterable`, `sortable` and `columns`, and `defineListQuery` for hand-written
+     modules (`packages/crud/tests/resource-depth.test.ts`). `make:crud` doesn't
+     generate these options yet.
 
 ### M10 — Missing drivers and contract-only packages
 

@@ -11,6 +11,13 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- `defineResource` gains allowlisted list queries. `filterable` adds
+  `?filter[column][operator]=value`, `sortable` adds `?sort=-column,column`, and
+  `relations` adds `?include=` through `belongsTo` and `hasMany`, which find their
+  foreign key and require a `columns` allowlist. `columns` replaces a column's
+  schema, such as a `jsonb` shape. All of it reaches OpenAPI and the RPC types, and
+  `defineListQuery` offers the same query to hand-written modules. Hidden columns
+  can't be filtered or sorted.
 - Typed registries through `Register`. `queue.dispatch('send-invoice', payload, ctx)`
   works by name once the queue has `jobs` (`QueueOptions`, `createQueueProvider`,
   `apiPreset`), and `Register.jobs` checks the name and payload. `send` and
