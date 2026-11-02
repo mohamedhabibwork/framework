@@ -11,6 +11,10 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- `MAIL_DRIVER=smtp` delivers through `SmtpMailTransport` (nodemailer, pooled).
+  TLS and certificate checks are on by default, and `smtpConfigSection()` reads
+  `MAIL_SMTP_*`. `smsChannel` adds SMS as a notification channel over an
+  `SmsTransport`, with `twilioSms`, `vonageSms` and `MemorySmsTransport`.
 - `defineResource` gains allowlisted list queries. `filterable` adds
   `?filter[column][operator]=value`, `sortable` adds `?sort=-column,column`, and
   `relations` adds `?include=` through `belongsTo` and `hasMany`, which find their
@@ -101,6 +105,8 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Changed
 
+- A line break in a mail subject or header is now a validation error, so a value
+  can't add headers of its own. `SMTP_PLANNED` and `SMS_PLANNED` are removed.
 - `JobList` and `AnyNotificationDefinition` no longer use `any`. A custom
   `EventBus` needs a generic `subscribe`, as `MemoryEventBus` has, once an app
   declares `Register.events`.

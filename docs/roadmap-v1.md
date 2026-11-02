@@ -171,6 +171,9 @@ runServer(app);
 ### M10 — Missing drivers and contract-only packages
 
 1. SMTP transport, plus an `SmsTransport` contract with Twilio/Vonage drivers (old M6).
+   - Done: `SmtpMailTransport` over nodemailer, proven against a real SMTP server in
+     tests, and `smsChannel` with `twilioSms` and `vonageSms`. The SMS drivers are
+     tested against a local stand-in for each API, not the live providers.
 2. S3, R2 and MinIO storage, validated against MinIO in compose (old M6).
 3. Streaming XLSX import/export and a pluggable PDF renderer (old M6).
 4. **`@framework/socialite` runtime.**

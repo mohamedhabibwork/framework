@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { authConfigSchema } from '@framework/auth';
 import { type DefineConfigLoadOptions, defineConfig, fromEnv, type InferConfig } from '@framework/core';
 import { loggingConfigSchema } from '@framework/logging';
+import { smtpConfigSection } from '@framework/mail';
 import { z } from 'zod/v4';
 
 const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
@@ -114,8 +115,9 @@ export const appConfig = defineConfig({
     }),
   }),
   mail: z.object({
-    driver: fromEnv('MAIL_DRIVER', z.enum(['console', 'memory']).default('console')),
+    driver: fromEnv('MAIL_DRIVER', z.enum(['console', 'memory', 'smtp']).default('console')),
     from: fromEnv('MAIL_FROM', z.string().trim().toLowerCase().email().default('no-reply@playground.local')),
+    smtp: smtpConfigSection(),
   }),
   notifications: z.object({
     providers: z
