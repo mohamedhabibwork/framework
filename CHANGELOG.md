@@ -11,6 +11,11 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- `@framework/socialite` has a runtime: Google, GitHub and Apple drivers,
+  `defineSocialDriver`, `socialiteRoutes`, a `social_accounts` table, and the
+  `socialite:providers` command. Linking on an email is off by default and needs
+  both sides verified, and two-step login still applies. `AuthService.startLoginFor`
+  starts a login for a user whose first factor was proved elsewhere.
 - Import and export support XLSX, and export supports PDF through a `PdfRenderer`
   you supply. Exports now stream to stores with `writeStream`, which
   `LocalExportStore` has, and a failed export leaves no partial artifact.

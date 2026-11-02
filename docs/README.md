@@ -20,6 +20,7 @@ docs site and AI agents at once.
 | [Search](search.md)                                                                             | index tables and query them                                       |
 | [Queues](queues.md) · [Workflows](workflows.md) · [Scheduling](scheduling.md)                   | run work outside the request                                      |
 | [OAuth server](oauth-server.md)                                                                 | let other applications obtain tokens for your API                 |
+| [Social login](socialite.md)                                                                    | sign users in through Google, GitHub, Apple or your own provider  |
 | [Testing](testing.md)                                                                           | write endpoint suites and run the release gates                   |
 | [Deployment](deployment.md)                                                                     | ship: processes, config, migrations, scaling                      |
 | [AI integration](ai.md)                                                                         | drive the framework from a coding agent                           |

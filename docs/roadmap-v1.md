@@ -186,6 +186,9 @@ runServer(app);
 4. **`@framework/socialite` runtime.**
    - Google, GitHub and Apple drivers, plus `defineSocialDriver`.
    - Account linking to the generic user.
+   - Done: all of it, in `@framework/socialite`, with the `socialite:providers` command
+     (`packages/socialite/tests/socialite.test.ts`). The drivers have only run against
+     a stand-in for each provider.
 5. **`@framework/observatory` runtime.**
    - Watchers backed by a Postgres store, with a protected JSON API.
    - Covers the `observatory:*` commands.
