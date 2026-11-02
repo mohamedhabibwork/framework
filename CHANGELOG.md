@@ -11,6 +11,11 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- `@framework/observatory` has a runtime: request, exception, query, job, mail and
+  event watchers, Postgres and memory stores, `observatoryRoutes`, and the
+  `observatory:*` commands. It's off by default and masks secret-looking values.
+  `DatabaseConnection.observeQueries` and `WorkerOptions.onSettled` are the new hooks
+  it watches through.
 - `@framework/socialite` has a runtime: Google, GitHub and Apple drivers,
   `defineSocialDriver`, `socialiteRoutes`, a `social_accounts` table, and the
   `socialite:providers` command. Linking on an email is off by default and needs
@@ -115,6 +120,8 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Changed
 
+- `authorizationGuard` now returns a guard's `Response` instead of ignoring it and
+  continuing, so a guard that answers rather than throws denies the request.
 - `ExportStore.write` and `StoredExport.content` also take bytes, so a custom store
   must accept a `Uint8Array`. `ImportFormat` and `ExportFormat` narrow `DataFormat`.
 - A line break in a mail subject or header is now a validation error, so a value

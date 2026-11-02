@@ -192,6 +192,8 @@ runServer(app);
 5. **`@framework/observatory` runtime.**
    - Watchers backed by a Postgres store, with a protected JSON API.
    - Covers the `observatory:*` commands.
+   - Done: request, exception, query, job, mail and event watchers, with
+     `packages/observatory/tests/observatory.test.ts`. No cache watcher yet.
 
 ### M11 — New packages
 
