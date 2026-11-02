@@ -42,6 +42,10 @@ export async function createTestContext(): Promise<TestContext> {
         APP_DEBUG: 'false',
         DATABASE_URL: database.url,
         DATABASE_MAX_CONNECTIONS: '4',
+        // Cache, locks and rate limits stay in-process, isolated per context.
+        CACHE_DRIVER: 'memory',
+        // The explicit env above hides .env.test; queues need the Redis it names.
+        ...(process.env.REDIS_URL ? { REDIS_URL: process.env.REDIS_URL } : {}),
         // Suites issue many rapid requests from one client; the coarse
         // api-group ceiling is production behavior, not a test subject here.
         HTTP_THROTTLE_ENABLED: 'false',

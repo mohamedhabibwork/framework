@@ -47,7 +47,8 @@ const api = apiPreset<AppConfig>({
  * The kernel owns the fixed outer order: request id -> body limit -> request
  * scope -> secure headers (strict preset, `http.secureHeaders`) -> CORS
  * (`http.corsOrigins`, off when empty). The `api` middleware group (shared
- * throttle) then wraps `/health`, every module under `/api/v1`, and the app routes.
+ * throttle) then wraps every module under `/api/v1` and the app routes;
+ * `/health` stays outside it so the probes still answer during a Redis outage.
  */
 export const app = defineApp<AppConfig, Operation>({
   http: (config, application) => ({

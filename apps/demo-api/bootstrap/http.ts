@@ -14,7 +14,8 @@ import { createMiddleware } from './middleware';
  * Composes the typed Hono application. The kernel owns the fixed outer order:
  * request id -> body limit -> request scope -> secure headers (strict preset,
  * `http.secureHeaders`) -> CORS (`http.corsOrigins`, off when empty) ->
- * module routes. The `api` middleware group adds the shared throttle.
+ * module routes. The `api` middleware group adds the shared throttle to
+ * everything except `/health`, whose probes must answer during a Redis outage.
  *
  * Audit endpoints (`/audit`) read the framework-owned audit trail; they are
  * denied in production until an identity/authorization layer exists. The
@@ -31,8 +32,8 @@ export function createHttp(application: DemoApiTestApplication) {
     cors: { origins: config.http.corsOrigins },
     report: (error, context) => console.error('[http] unhandled error', context, error),
   })
-    .use(...createMiddleware(config).resolve(['api']))
     .route('/health', healthRoutes)
+    .use(...createMiddleware(config).resolve(['api']))
     .route('/api/v1', apiRoutes)
     .route('/api/v1/auth', authRoutes(config))
     .route(

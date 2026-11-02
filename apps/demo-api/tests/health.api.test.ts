@@ -21,6 +21,8 @@ beforeAll(async () => {
       APP_DEBUG: 'false',
       // Never connected: /health/live does not touch the database.
       DATABASE_URL: 'postgres://app:unused@127.0.0.1:1/unused',
+      // Routes behind the throttle must not need a running Redis.
+      CACHE_DRIVER: 'memory',
     }),
   );
   application = await createApplication(config).boot();

@@ -63,7 +63,7 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   instead of three. `defineApp` builds the application and kernel, mounts
   `/health` and every module under the API prefix, applies `overrides` before
   registration, and refuses duplicate modules or routes. Its `middleware` option
-  wraps health, module and app routes, and the `http` callback receives the
+  wraps module and app routes, and the `http` callback receives the
   application (for `resolveActor`).
 
 ### Changed
@@ -102,17 +102,28 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Fixed
 
+- `/health` probes no longer depend on Redis. The `api` throttle wrapped them, so
+  a Redis outage failed the liveness probe, which could get healthy instances
+  restarted, and hid the failed check behind a 500 on `/health/ready`. `defineApp`
+  and demo-api now mount `/health` ahead of app middleware, so no app middleware
+  runs on it and readiness reports 503. The probes are therefore not rate limited;
+  keep `/health/ready` off the public internet.
 - The Redis cache driver fails fast during an outage and recovers without a
   restart. Commands used to queue for about 31 seconds against an unreachable
   Redis, stalling every throttled request including `/health/live`, and the
   client then stayed failed even after Redis returned. They now reject with
-  `CACHE_UNAVAILABLE` in under a second on a refused connection, or about 2
-  seconds per attempt on a host that never answers, and the next command opens
-  a new connection. Applies to cache, locks and rate limiting.
+  `CACHE_UNAVAILABLE` in under a second on a refused connection, or after a
+  2-second timeout on a host that never answers, and the next command opens a
+  new connection. Applies to cache, locks and rate limiting.
 - `GET /health/ready` in generated apps and the playground reported the database
   as `ok` while it was down: `pingDatabase` returns `false` instead of throwing.
   The route now uses `databaseHealthCheck`. The Redis-backed check is renamed
   from `redis` to `cache`.
+- Test suites in generated apps, the template, the playground and demo-api no
+  longer need Redis on port 6379. They build config from an explicit env object,
+  so `REDIS_URL` from `.env.test` never reached the cache and the `api` throttle
+  stalled `/health/live` until the test timed out. They now set `CACHE_DRIVER=memory`, and
+  `tests/support.ts` forwards `REDIS_URL` so queues reach the Redis it names.
 
 ## [0.2.0] — 2026-10-27
 
