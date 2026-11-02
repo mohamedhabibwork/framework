@@ -109,9 +109,10 @@ runServer(app);
    - Done: `create`, `template/` and the playground compose in one
      `bootstrap/app.ts` on `defineApp`, `bin/server.ts` uses `runServer`, and
      `make:crud` / `make:auth` register there (`paths.app`). Five wiring files
-     are gone.
-   - Remaining: `defineConfig` in generated config, presets that absorb the
-     provider wrappers, and `runWorker` / `runScheduler`.
+     are gone. Their `config/index.ts` uses `defineConfig`, with no
+     hand-written env mapping.
+   - Remaining: presets that absorb the provider wrappers, and `runWorker` /
+     `runScheduler`.
 
 ### M9 — Generic resources and typed registries
 

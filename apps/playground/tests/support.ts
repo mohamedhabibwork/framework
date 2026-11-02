@@ -1,5 +1,4 @@
 import { join } from 'node:path';
-import { parseConfig } from '@framework/core';
 import {
   createTestDatabase,
   type JsonRequester,
@@ -7,7 +6,7 @@ import {
   serveOnEphemeralPort,
 } from '@framework/testing';
 import { createApplication, createHttp, type PlaygroundApplication } from '../bootstrap/app';
-import { configSchema, mapEnvironment } from '../config';
+import { appConfig } from '../config';
 
 const APP_ROOT = join(import.meta.dir, '..');
 
@@ -34,18 +33,15 @@ export async function createTestContext(): Promise<TestContext> {
 
   let application: PlaygroundApplication | undefined;
   try {
-    const config = parseConfig(
-      configSchema,
-      mapEnvironment({
-        APP_ENV: 'test',
-        APP_DEBUG: 'false',
-        DATABASE_URL: database.url,
-        DATABASE_MAX_CONNECTIONS: '4',
-        // Suites issue many rapid requests from one client; the coarse
-        // api-group ceiling is production behavior, not a test subject here.
-        HTTP_THROTTLE_ENABLED: 'false',
-      }),
-    );
+    const config = appConfig.parse({
+      APP_ENV: 'test',
+      APP_DEBUG: 'false',
+      DATABASE_URL: database.url,
+      DATABASE_MAX_CONNECTIONS: '4',
+      // Suites issue many rapid requests from one client; the coarse
+      // api-group ceiling is production behavior, not a test subject here.
+      HTTP_THROTTLE_ENABLED: 'false',
+    });
     application = await createApplication(config).boot();
     const http = createHttp(application);
     const server = process.env.TEST_MODE === 'network' ? serveOnEphemeralPort(http.fetch) : undefined;

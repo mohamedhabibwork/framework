@@ -66,6 +66,12 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   `paths.app` keep the three-file registration; `paths.apiRoutes` and
   `paths.openapi` are now optional.
 - Generator plans compose several updates to the same file into one change.
+- Generated apps, `template/` and the playground declare `config/index.ts` with
+  `defineConfig` and `fromEnv`. `configSchema` and `mapEnvironment` are replaced
+  by `appConfig`; tests call `appConfig.parse(env)`. An unset
+  `notifications.providers` is now `undefined` rather than `{}`. `make:auth`
+  still updates the env mapping in apps that have one.
+- `fromEnv` also takes a list of variables, where the first one set wins.
 
 - The documentation site deploys on Dokploy instead of Cloudflare Workers:
   `apps/docs/Dockerfile` builds the static Starlight output with Bun and

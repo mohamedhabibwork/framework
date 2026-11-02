@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { authConfigSchema } from '@framework/auth';
-import { type DeepReadonly, loadConfig } from '@framework/core';
+import { type DefineConfigLoadOptions, defineConfig, fromEnv, type InferConfig } from '@framework/core';
 import { loggingConfigSchema } from '@framework/logging';
 import { z } from 'zod/v4';
 
@@ -19,160 +19,113 @@ const booleanString = z.enum(['true', 'false']).transform((value) => value === '
  */
 const storageRoot = join(import.meta.dir, '..', 'storage');
 
-export const configSchema = z.object({
+const notificationProvider = (typeVariable: string) =>
+  z
+    .object({
+      type: fromEnv(typeVariable, z.string().trim().min(1)),
+      target: z.string().trim().min(1).optional(),
+      options: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional();
+
+/** One schema per setting, bound to its variable. Precedence: process env > env file > defaults. */
+export const appConfig = defineConfig({
   app: z.object({
-    name: z.string().min(1).default('playground'),
-    env: z.enum(['development', 'test', 'production']).default('development'),
-    debug: booleanString.default(false),
+    name: fromEnv('APP_NAME', z.string().min(1).default('playground')),
+    env: fromEnv('APP_ENV', z.enum(['development', 'test', 'production']).default('development')),
+    debug: fromEnv('APP_DEBUG', booleanString.default(false)),
   }),
   http: z.object({
-    host: z.string().min(1).default('127.0.0.1'),
-    port: z.coerce.number().int().min(0).max(65535).default(3000),
-    corsOrigins: z
-      .string()
-      .default('')
-      .transform((value) =>
-        value
-          .split(',')
-          .map((origin) => origin.trim())
-          .filter(Boolean),
-      ),
-    maxBodyBytes: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .default(1024 * 1024),
-    secureHeaders: booleanString.default(true),
+    host: fromEnv('HTTP_HOST', z.string().min(1).default('127.0.0.1')),
+    port: fromEnv('HTTP_PORT', z.coerce.number().int().min(0).max(65535).default(3000)),
+    corsOrigins: fromEnv(
+      'CORS_ORIGINS',
+      z
+        .string()
+        .default('')
+        .transform((value) =>
+          value
+            .split(',')
+            .map((origin) => origin.trim())
+            .filter(Boolean),
+        ),
+    ),
+    maxBodyBytes: fromEnv(
+      'HTTP_MAX_BODY_BYTES',
+      z.coerce
+        .number()
+        .int()
+        .min(1)
+        .default(1024 * 1024),
+    ),
+    secureHeaders: fromEnv('HTTP_SECURE_HEADERS', booleanString.default(true)),
     throttle: z.object({
-      enabled: booleanString.default(true),
-      limit: z.coerce.number().int().min(1).default(120),
-      windowSeconds: z.coerce.number().int().min(1).default(60),
+      enabled: fromEnv('HTTP_THROTTLE_ENABLED', booleanString.default(true)),
+      limit: fromEnv('HTTP_THROTTLE_LIMIT', z.coerce.number().int().min(1).default(120)),
+      windowSeconds: fromEnv('HTTP_THROTTLE_WINDOW_SECONDS', z.coerce.number().int().min(1).default(60)),
     }),
-    shutdownTimeoutMs: z.coerce.number().int().min(100).default(10_000),
+    shutdownTimeoutMs: fromEnv('SHUTDOWN_TIMEOUT_MS', z.coerce.number().int().min(100).default(10_000)),
   }),
   database: z.object({
-    url: z.url({ protocol: /^postgres(ql)?$/ }),
-    maxConnections: z.coerce.number().int().min(1).max(100).default(10),
-    migrationsFolder: z.string().default('database/migrations'),
+    url: fromEnv('DATABASE_URL', z.url({ protocol: /^postgres(ql)?$/ })),
+    maxConnections: fromEnv('DATABASE_MAX_CONNECTIONS', z.coerce.number().int().min(1).max(100).default(10)),
+    migrationsFolder: fromEnv('DATABASE_MIGRATIONS_FOLDER', z.string().default('database/migrations')),
   }),
   redis: z.object({
-    url: z.url({ protocol: /^redis$/ }).default('redis://127.0.0.1:6379'),
+    url: fromEnv('REDIS_URL', z.url({ protocol: /^redis$/ }).default('redis://127.0.0.1:6379')),
   }),
   queue: z.object({
-    name: z.string().min(1).default('default'),
-    concurrency: z.coerce.number().int().min(1).max(64).default(4),
-    prefix: z.string().min(1).default('playground'),
+    name: fromEnv('QUEUE_NAME', z.string().min(1).default('default')),
+    concurrency: fromEnv('QUEUE_CONCURRENCY', z.coerce.number().int().min(1).max(64).default(4)),
+    prefix: fromEnv('QUEUE_PREFIX', z.string().min(1).default('playground')),
   }),
   workflow: z.object({
     /** Terminal runs older than this are removed by `workflow:prune`. */
-    retentionDays: z.coerce.number().int().min(1).max(365).default(7),
+    retentionDays: fromEnv('WORKFLOW_RETENTION_DAYS', z.coerce.number().int().min(1).max(365).default(7)),
   }),
   scheduler: z.object({
-    timezone: z.string().min(1).optional(),
+    timezone: fromEnv('SCHEDULER_TIMEZONE', z.string().min(1).optional()),
   }),
   events: z.object({
-    driver: z.enum(['memory', 'redis']).default('memory'),
+    driver: fromEnv('EVENTS_DRIVER', z.enum(['memory', 'redis']).default('memory')),
   }),
   cache: z.object({
-    driver: z.enum(['memory', 'redis']).default('redis'),
-    url: z.string().min(1).default('redis://127.0.0.1:6379'),
-    prefix: z.string().min(1).default('playground'),
+    driver: fromEnv('CACHE_DRIVER', z.enum(['memory', 'redis']).default('redis')),
+    url: fromEnv(['CACHE_URL', 'REDIS_URL'], z.string().min(1).default('redis://127.0.0.1:6379')),
+    prefix: fromEnv('CACHE_PREFIX', z.string().min(1).default('playground')),
   }),
-  logging: loggingConfigSchema,
+  // The package's schema, with its defaults and file-driver check, plus env bindings.
+  logging: loggingConfigSchema.safeExtend({
+    level: fromEnv('LOG_LEVEL', loggingConfigSchema.shape.level.clone()),
+    driver: fromEnv('LOG_DRIVER', loggingConfigSchema.shape.driver.clone()),
+    filePath: fromEnv('LOG_FILE_PATH', loggingConfigSchema.shape.filePath.clone()),
+  }),
   storage: z.object({
-    default: z.string().min(1).default('local'),
-    disks: z
-      .record(
-        z.string(),
-        z.object({
-          driver: z.literal('local'),
-          root: z.string().min(1),
-          visibility: z.enum(['private', 'public']).default('private'),
-          publicBaseUrl: z.string().min(1).optional(),
-        }),
-      )
-      .default({ local: { driver: 'local', root: storageRoot, visibility: 'private' } }),
+    default: fromEnv('STORAGE_DEFAULT_DISK', z.string().min(1).default('local')),
+    disks: z.object({
+      local: z.object({
+        driver: z.literal('local').default('local'),
+        root: fromEnv('STORAGE_ROOT', z.string().min(1).default(storageRoot)),
+        visibility: z.enum(['private', 'public']).default('private'),
+        publicBaseUrl: z.string().min(1).optional(),
+      }),
+    }),
   }),
   mail: z.object({
-    driver: z.enum(['console', 'memory']).default('console'),
-    from: z.string().trim().toLowerCase().email().default('no-reply@playground.local'),
+    driver: fromEnv('MAIL_DRIVER', z.enum(['console', 'memory']).default('console')),
+    from: fromEnv('MAIL_FROM', z.string().trim().toLowerCase().email().default('no-reply@playground.local')),
   }),
   notifications: z.object({
     providers: z
       .object({
-        push: z
-          .object({
-            type: z.string().trim().min(1),
-            target: z.string().trim().min(1).optional(),
-            options: z.record(z.string(), z.unknown()).optional(),
-          })
-          .optional(),
-        messaging: z
-          .object({
-            type: z.string().trim().min(1),
-            target: z.string().trim().min(1).optional(),
-            options: z.record(z.string(), z.unknown()).optional(),
-          })
-          .optional(),
+        push: notificationProvider('NOTIFICATIONS_PUSH_TYPE'),
+        messaging: notificationProvider('NOTIFICATIONS_MESSAGING_TYPE'),
       })
       .optional(),
   }),
   auth: authConfigSchema,
 });
 
-export type AppConfig = DeepReadonly<z.output<typeof configSchema>>;
+export type AppConfig = InferConfig<typeof appConfig>;
 
-/** Maps environment variables onto the config schema. Precedence: process env > env file > defaults. */
-export const mapEnvironment = (env: Readonly<Record<string, string>>): z.input<typeof configSchema> => ({
-  app: { name: env.APP_NAME, env: env.APP_ENV as never, debug: env.APP_DEBUG as never },
-  http: {
-    host: env.HTTP_HOST,
-    port: env.HTTP_PORT,
-    corsOrigins: env.CORS_ORIGINS,
-    maxBodyBytes: env.HTTP_MAX_BODY_BYTES,
-    secureHeaders: env.HTTP_SECURE_HEADERS as never,
-    throttle: {
-      enabled: env.HTTP_THROTTLE_ENABLED as never,
-      limit: env.HTTP_THROTTLE_LIMIT,
-      windowSeconds: env.HTTP_THROTTLE_WINDOW_SECONDS,
-    },
-    shutdownTimeoutMs: env.SHUTDOWN_TIMEOUT_MS,
-  },
-  database: {
-    url: env.DATABASE_URL as string,
-    maxConnections: env.DATABASE_MAX_CONNECTIONS,
-    migrationsFolder: env.DATABASE_MIGRATIONS_FOLDER,
-  },
-  redis: { url: env.REDIS_URL },
-  queue: { name: env.QUEUE_NAME, concurrency: env.QUEUE_CONCURRENCY, prefix: env.QUEUE_PREFIX },
-  workflow: { retentionDays: env.WORKFLOW_RETENTION_DAYS },
-  scheduler: { timezone: env.SCHEDULER_TIMEZONE },
-  events: { driver: env.EVENTS_DRIVER as never },
-  cache: {
-    driver: env.CACHE_DRIVER as never,
-    url: env.CACHE_URL ?? env.REDIS_URL,
-    prefix: env.CACHE_PREFIX,
-  },
-  logging: { level: env.LOG_LEVEL as never, driver: env.LOG_DRIVER as never, filePath: env.LOG_FILE_PATH },
-  storage: {
-    default: env.STORAGE_DEFAULT_DISK,
-    disks: env.STORAGE_ROOT
-      ? { local: { driver: 'local' as const, root: env.STORAGE_ROOT, visibility: 'private' as const } }
-      : undefined,
-  },
-  mail: {
-    driver: env.MAIL_DRIVER as never,
-    from: env.MAIL_FROM,
-  },
-  notifications: {
-    providers: {
-      ...(env.NOTIFICATIONS_PUSH_TYPE ? { push: { type: env.NOTIFICATIONS_PUSH_TYPE } } : {}),
-      ...(env.NOTIFICATIONS_MESSAGING_TYPE ? { messaging: { type: env.NOTIFICATIONS_MESSAGING_TYPE } } : {}),
-    },
-  },
-  auth: {},
-});
-
-export function loadAppConfig(options: { envFile?: string; processEnv?: Record<string, string | undefined> } = {}) {
-  return loadConfig({ schema: configSchema, map: mapEnvironment, envFile: options.envFile ?? '.env', ...options });
-}
+export const loadAppConfig = (options?: DefineConfigLoadOptions) => appConfig.load(options);
