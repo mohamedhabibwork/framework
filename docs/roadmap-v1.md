@@ -139,6 +139,9 @@ runServer(app);
      and `container` takes any `Resolver` without a cast
      (`packages/crud/tests/service-types.test.ts`).
 3. Generic repository mixin constructors, with no `as unknown as` overrides.
+   - Done: `BaseRepository` and `BaseSoftDeletableRepository` extend one generic
+     base each, and their 27 delegating overrides are gone. Hooks and helpers see
+     the concrete table (`packages/database/tests/repository-types.test.ts`).
 4. **Auth generic over the user type:** `createAuthProvider<TConfig, TUser>({ usersTable, … })`.
    - `Principal<TUser>`.
    - Guard names are extensible.

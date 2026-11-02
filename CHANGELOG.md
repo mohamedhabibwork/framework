@@ -76,6 +76,10 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Changed
 
+- `BaseRepository` and `BaseSoftDeletableRepository` no longer re-declare every
+  method with casts. Subclass hooks and helpers such as `beforeCreate`,
+  `beforeUpdate` and `before` now see the concrete table; they used to see
+  `{ id: unknown }`, so `super.beforeCreate(values)` couldn't be used as a row.
 - `ownedBy` keeps its field name, so a service's `ownership` option only accepts
   a property of its entity and a typo no longer compiles. `baseService`'s
   `container` option is a `Resolver`, so a real `Container` or `Scope` needs no
