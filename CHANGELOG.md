@@ -42,6 +42,12 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
   - `healthRoutes({ checks, timeoutMs })` in `@framework/http`. Probes run
     concurrently with a deadline each (2s by default), so a hung dependency
     can no longer stall readiness.
+- `runWorker` in `@framework/queue` and `runScheduler` in `@framework/scheduler`:
+  consume a queue with graceful SIGTERM/SIGINT drain. `extensions` adds
+  subsystems on the same queue, such as `WorkflowEngine`. `bin/worker.ts` uses
+  `runWorker` in generated apps, the template and the playground, and the
+  playground's `bin/scheduler.ts` uses `runScheduler`. Generated apps have no
+  scheduler entry point yet.
 - `runServer` in `@framework/http`: serves a kernel with graceful SIGTERM/SIGINT
   draining, plus an idempotent `stop()` that shuts the application down.
 - `defineModule` and `defineApp` in `@framework/http`. A module bundles its

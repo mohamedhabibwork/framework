@@ -1,6 +1,5 @@
-import { installGracefulShutdown } from '@framework/core';
 import { EVENT_BUS } from '@framework/events';
-import { JobWorker, QueueManager } from '@framework/queue';
+import { QueueManager, runWorker } from '@framework/queue';
 import { WORKFLOW_MANAGER, WorkflowEngine } from '@framework/workflow';
 import { jobs } from '../app/jobs';
 import { createApplication } from '../bootstrap/app';
@@ -19,21 +18,12 @@ const engine = new WorkflowEngine(
   queue,
   application.container.has(EVENT_BUS) ? application.container.resolve(EVENT_BUS) : null,
 );
-const worker = new JobWorker(queue, application, [...jobs, ...engine.jobs], {
+
+runWorker({
+  application,
+  queue,
+  jobs,
+  extensions: [engine],
   concurrency: config.queue.concurrency,
-  onFailed: (job, error) => console.error(`[worker] job ${job.name} (${job.id ?? '?'}) failed`, error),
-});
-worker.start();
-engine.start();
-
-console.error(`[worker] consuming queue "${config.queue.name}" (concurrency ${config.queue.concurrency})`);
-
-installGracefulShutdown({
-  timeoutMs: config.http.shutdownTimeoutMs,
-  onShutdown: async () => {
-    await engine.close();
-    await worker.close();
-    await queue.close();
-    await application.shutdown();
-  },
+  shutdownTimeoutMs: config.http.shutdownTimeoutMs,
 });

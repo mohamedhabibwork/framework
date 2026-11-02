@@ -111,8 +111,9 @@ runServer(app);
      `make:crud` / `make:auth` register there (`paths.app`). Five wiring files
      are gone. Their `config/index.ts` uses `defineConfig`, with no
      hand-written env mapping.
-   - Remaining: presets that absorb the provider wrappers, and `runWorker` /
-     `runScheduler`.
+     `bin/worker.ts` uses `runWorker`, and the playground's `bin/scheduler.ts`
+     uses `runScheduler`.
+   - Remaining: presets that absorb the provider wrappers.
 
 ### M9 — Generic resources and typed registries
 
