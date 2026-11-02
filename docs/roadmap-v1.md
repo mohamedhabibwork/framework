@@ -209,6 +209,9 @@ Every new package follows the same pattern:
    - `defineAbility<TSubject, TActor>`, with `can` / `authorize`.
    - Roles and permissions typed by `Register['permissions']`.
    - Config-backed and DB-backed stores.
+   - Done: gate, abilities, config and PostgreSQL stores, `permissionPolicy`, `make:ability`
+     and `permission:sync` (`packages/authorization/tests/authorization.test.ts`). The
+     package is a plain directory until it has its own repository.
 2. **`@framework/tenancy`.**
    - Subdomain, header, path and custom resolvers.
    - Row-scoped or schema-per-tenant data.

@@ -110,6 +110,22 @@
         "@framework/testing": "workspace:*",
       },
     },
+    "packages/authorization": {
+      "name": "@framework/authorization",
+      "version": "0.2.0",
+      "dependencies": {
+        "@framework/auth": "workspace:*",
+        "@framework/core": "workspace:*",
+        "@framework/database": "workspace:*",
+        "@framework/http": "workspace:*",
+        "drizzle-orm": "0.45.4",
+        "hono": "4.13.13",
+        "zod": "4.6.7",
+      },
+      "devDependencies": {
+        "@framework/testing": "workspace:*",
+      },
+    },
     "packages/cache": {
       "name": "@framework/cache",
       "version": "0.2.0",
@@ -627,6 +643,8 @@
     "@framework/ai-mcp": ["@framework/ai-mcp@workspace:packages/ai-mcp"],
 
     "@framework/auth": ["@framework/auth@workspace:packages/auth"],
+
+    "@framework/authorization": ["@framework/authorization@workspace:packages/authorization"],
 
     "@framework/cache": ["@framework/cache@workspace:packages/cache"],
 

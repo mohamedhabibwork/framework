@@ -7,27 +7,28 @@ docs site and AI agents at once.
 
 ## Map
 
-| Document                                                                                        | Read it when you want to…                                         |
-| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [Getting started](getting-started.md)                                                           | go from an empty machine to a running, tested API                 |
-| [CLI reference](cli-reference.md)                                                               | look up a command, option, exit code or generator                 |
-| [Authoring modules](modules.md)                                                                 | add a feature: schemas, repository, service, controller, routes   |
-| [Platform guide](platform.md)                                                                   | understand the kernel: context, errors, pagination, audit, events |
-| [Helpers](helpers.md)                                                                           | use `config()`, `env()`, `abort()`, `logger()`, `retry()`         |
-| [Authentication](authentication.md)                                                             | add sessions, tokens, verification, TOTP or JWT guards            |
-| [Errors and codes](errors.md)                                                                   | interpret or produce an error response                            |
-| [Cache](cache.md) · [Storage](storage.md) · [Mail](mail.md) · [Notifications](notifications.md) | wire a subsystem                                                  |
-| [Search](search.md)                                                                             | index tables and query them                                       |
-| [Queues](queues.md) · [Workflows](workflows.md) · [Scheduling](scheduling.md)                   | run work outside the request                                      |
-| [OAuth server](oauth-server.md)                                                                 | let other applications obtain tokens for your API                 |
-| [Social login](socialite.md)                                                                    | sign users in through Google, GitHub, Apple or your own provider  |
-| [Observatory](observatory.md)                                                                   | inspect requests, queries, jobs, events, mail and errors          |
-| [Testing](testing.md)                                                                           | write endpoint suites and run the release gates                   |
-| [Deployment](deployment.md)                                                                     | ship: processes, config, migrations, scaling                      |
-| [AI integration](ai.md)                                                                         | drive the framework from a coding agent                           |
-| [Packages](packages.md)                                                                         | see what each package does and whether it is ready                |
-| [Implementation status](status.md)                                                              | check what is validated, implemented or planned                   |
-| [Architecture decisions](architecture/decisions.md)                                             | understand why a choice was made                                  |
+| Document                                                                                        | Read it when you want to…                                             |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [Getting started](getting-started.md)                                                           | go from an empty machine to a running, tested API                     |
+| [CLI reference](cli-reference.md)                                                               | look up a command, option, exit code or generator                     |
+| [Authoring modules](modules.md)                                                                 | add a feature: schemas, repository, service, controller, routes       |
+| [Platform guide](platform.md)                                                                   | understand the kernel: context, errors, pagination, audit, events     |
+| [Helpers](helpers.md)                                                                           | use `config()`, `env()`, `abort()`, `logger()`, `retry()`             |
+| [Authentication](authentication.md)                                                             | add sessions, tokens, verification, TOTP or JWT guards                |
+| [Errors and codes](errors.md)                                                                   | interpret or produce an error response                                |
+| [Cache](cache.md) · [Storage](storage.md) · [Mail](mail.md) · [Notifications](notifications.md) | wire a subsystem                                                      |
+| [Search](search.md)                                                                             | index tables and query them                                           |
+| [Queues](queues.md) · [Workflows](workflows.md) · [Scheduling](scheduling.md)                   | run work outside the request                                          |
+| [OAuth server](oauth-server.md)                                                                 | let other applications obtain tokens for your API                     |
+| [Authorization](authorization.md)                                                               | decide what a principal may do, with roles, permissions and abilities |
+| [Social login](socialite.md)                                                                    | sign users in through Google, GitHub, Apple or your own provider      |
+| [Observatory](observatory.md)                                                                   | inspect requests, queries, jobs, events, mail and errors              |
+| [Testing](testing.md)                                                                           | write endpoint suites and run the release gates                       |
+| [Deployment](deployment.md)                                                                     | ship: processes, config, migrations, scaling                          |
+| [AI integration](ai.md)                                                                         | drive the framework from a coding agent                               |
+| [Packages](packages.md)                                                                         | see what each package does and whether it is ready                    |
+| [Implementation status](status.md)                                                              | check what is validated, implemented or planned                       |
+| [Architecture decisions](architecture/decisions.md)                                             | understand why a choice was made                                      |
 
 Specification and planning documents (not user guides):
 [framwork.md](../framwork.md) (the specification), [folder.md](../folder.md)

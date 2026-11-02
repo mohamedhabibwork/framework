@@ -11,6 +11,10 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- `@framework/authorization`: a deny-by-default gate with roles, permissions and
+  subject-level abilities, config and PostgreSQL stores, `requirePermission`,
+  `authorizeAbility`, `permissionPolicy` for resources, `make:ability` and
+  `permission:sync`. A token's scopes also limit what its owner's roles grant.
 - `@framework/observatory` has a runtime: request, exception, query, job, mail and
   event watchers, Postgres and memory stores, `observatoryRoutes`, and the
   `observatory:*` commands. It's off by default and masks secret-looking values.

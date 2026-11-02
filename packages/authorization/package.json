@@ -1,0 +1,40 @@
+{
+  "name": "@framework/authorization",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Abilities, roles and permissions: a deny-by-default gate over your principals.",
+  "homepage": "https://github.com/mohamedhabibwork/framework-authorization#readme",
+  "bugs": {
+    "url": "https://github.com/mohamedhabibwork/framework/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamedhabibwork/framework.git",
+    "directory": "packages/authorization"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@framework/auth": "workspace:*",
+    "@framework/core": "workspace:*",
+    "@framework/database": "workspace:*",
+    "@framework/http": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.13",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@framework/testing": "workspace:*"
+  }
+}
