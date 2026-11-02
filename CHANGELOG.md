@@ -11,6 +11,9 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- Import and export support XLSX, and export supports PDF through a `PdfRenderer`
+  you supply. Exports now stream to stores with `writeStream`, which
+  `LocalExportStore` has, and a failed export leaves no partial artifact.
 - The `s3`, `r2` and `minio` storage drivers are now tested against a real MinIO
   server in `deployment/compose.yaml`, so `bun run db:up` starts one on port 59000.
 - `MAIL_DRIVER=smtp` delivers through `SmtpMailTransport` (nodemailer, pooled).
@@ -107,6 +110,8 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Changed
 
+- `ExportStore.write` and `StoredExport.content` also take bytes, so a custom store
+  must accept a `Uint8Array`. `ImportFormat` and `ExportFormat` narrow `DataFormat`.
 - A line break in a mail subject or header is now a validation error, so a value
   can't add headers of its own. `SMTP_PLANNED` and `SMS_PLANNED` are removed.
 - `JobList` and `AnyNotificationDefinition` no longer use `any`. A custom

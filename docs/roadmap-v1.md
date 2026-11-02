@@ -179,6 +179,10 @@ runServer(app);
      compose (`packages/storage/tests/s3-compatible.test.ts`). The storagekit drivers
      needed no changes. `r2` hasn't run against Cloudflare.
 3. Streaming XLSX import/export and a pluggable PDF renderer (old M6).
+   - Done: `xlsxChunks` and `parseXlsx` in `@framework/crud`, checked against another
+     implementation (`packages/crud/tests/xlsx.test.ts`), and the `PdfRenderer` contract.
+     Export streams to `LocalExportStore`. Import stays in memory, bounded, because the
+     content travels in the job payload.
 4. **`@framework/socialite` runtime.**
    - Google, GitHub and Apple drivers, plus `defineSocialDriver`.
    - Account linking to the generic user.
