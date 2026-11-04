@@ -217,6 +217,9 @@ Every new package follows the same pattern:
    - Row-scoped or schema-per-tenant data.
    - Tenant-prefixed cache, queue, storage and search keys.
    - `tenant:*` commands.
+   - Partly done: resolvers, row scoping, per-tenant schemas and `tenantKey`
+     (`packages/tenancy/tests/tenancy.test.ts`). Still open: `tenant:*` commands, migrating
+     tenant schemas, a `make:*` generator, and cache, queue and storage applying keys themselves.
 3. **`@framework/flags` and `@framework/settings`.**
    - Typed flags that resolve global → tenant → user, with percentage rollout.
    - A typed runtime settings store.

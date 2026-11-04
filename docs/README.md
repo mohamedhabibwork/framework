@@ -21,6 +21,7 @@ docs site and AI agents at once.
 | [Queues](queues.md) · [Workflows](workflows.md) · [Scheduling](scheduling.md)                   | run work outside the request                                          |
 | [OAuth server](oauth-server.md)                                                                 | let other applications obtain tokens for your API                     |
 | [Authorization](authorization.md)                                                               | decide what a principal may do, with roles, permissions and abilities |
+| [Tenancy](tenancy.md)                                                                           | serve several customers from one app and keep their data apart        |
 | [Social login](socialite.md)                                                                    | sign users in through Google, GitHub, Apple or your own provider      |
 | [Observatory](observatory.md)                                                                   | inspect requests, queries, jobs, events, mail and errors              |
 | [Testing](testing.md)                                                                           | write endpoint suites and run the release gates                       |

@@ -11,6 +11,9 @@ Rendered release notes live at [framework.habib.cloud/releases](https://framewor
 
 ### Added
 
+- `@framework/tenancy`: subdomain, header and path resolvers, `tenancyMiddleware` with a
+  required membership check, `TenantScoped` repositories, `runInTenantSchema`, `tenantKey`
+  and `tenantJob`.
 - `@framework/authorization`: a deny-by-default gate with roles, permissions and
   subject-level abilities, config and PostgreSQL stores, `requirePermission`,
   `authorizeAbility`, `permissionPolicy` for resources, `make:ability` and

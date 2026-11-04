@@ -409,6 +409,24 @@
         "@framework/http": "workspace:*",
       },
     },
+    "packages/tenancy": {
+      "name": "@framework/tenancy",
+      "version": "0.2.0",
+      "dependencies": {
+        "@framework/core": "workspace:*",
+        "@framework/database": "workspace:*",
+        "@framework/http": "workspace:*",
+        "@framework/queue": "workspace:*",
+        "drizzle-orm": "0.45.4",
+        "hono": "4.13.13",
+        "zod": "4.6.7",
+      },
+      "devDependencies": {
+        "@framework/crud": "workspace:*",
+        "@framework/openapi": "workspace:*",
+        "@framework/testing": "workspace:*",
+      },
+    },
     "packages/testing": {
       "name": "@framework/testing",
       "version": "0.2.0",
@@ -687,6 +705,8 @@
     "@framework/storage": ["@framework/storage@workspace:packages/storage"],
 
     "@framework/support": ["@framework/support@workspace:packages/support"],
+
+    "@framework/tenancy": ["@framework/tenancy@workspace:packages/tenancy"],
 
     "@framework/testing": ["@framework/testing@workspace:packages/testing"],
 
