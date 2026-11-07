@@ -110,3 +110,11 @@
 	path = packages/presets
 	url = https://github.com/mohamedhabibwork/framework-presets.git
 	branch = main
+[submodule "packages/authorization"]
+	path = packages/authorization
+	url = https://github.com/mohamedhabibwork/framework-authorization.git
+	branch = main
+[submodule "packages/tenancy"]
+	path = packages/tenancy
+	url = https://github.com/mohamedhabibwork/framework-tenancy.git
+	branch = main
