@@ -226,7 +226,7 @@ describe('authorize', () => {
 
 type Config = { readonly authorization: AuthorizationConfig };
 
-const serve = async (assignments: Record<string, string[]>) => {
+const appFor = async (assignments: Record<string, string[]>) => {
   const authorization: AuthorizationConfig = { driver: 'config', roles, assignments };
   const app = new Application<Config>({
     config: { authorization },
@@ -252,7 +252,7 @@ const as = (user: string) => ({ headers: { 'x-user': user } });
 
 describe('middleware', () => {
   test('requirePermission answers 401, 403 and 200', async () => {
-    const { app, http } = await serve({ ada: ['viewer'] });
+    const { app, http } = await appFor({ ada: ['viewer'] });
 
     expect((await http.request('/posts')).status).toBe(401);
     expect((await http.request('/posts', as('bob'))).status).toBe(403);
@@ -261,7 +261,7 @@ describe('middleware', () => {
   });
 
   test('authorizeAbility checks the subject from the request', async () => {
-    const { app, http } = await serve({});
+    const { app, http } = await appFor({});
 
     expect((await http.request('/posts/ada')).status).toBe(401);
     expect((await http.request('/posts/ada', as('bob'))).status).toBe(403);
@@ -270,7 +270,7 @@ describe('middleware', () => {
   });
 
   test('authorizeAbility denies a missing subject before its check can pass it', async () => {
-    const { app, http } = await serve({});
+    const { app, http } = await appFor({});
     let checked = false;
     const lenient = defineAbility<{ locked: boolean } | null>('lenient', ({ subject }) => {
       checked = true;
@@ -288,7 +288,7 @@ describe('middleware', () => {
   });
 
   test('permissionPolicy maps resource abilities to permissions', async () => {
-    const { app, http } = await serve({ ada: ['editor'], root: ['admin'] });
+    const { app, http } = await appFor({ ada: ['editor'], root: ['admin'] });
     const policy = permissionPolicy('posts');
     const seen: Record<string, boolean> = {};
     http.get('/policy', async (c) => {

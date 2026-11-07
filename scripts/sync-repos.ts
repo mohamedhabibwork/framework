@@ -20,7 +20,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { toStandalonePackageJson } from '../packages/cli/src/commands/create';
-import { appTemplateFiles } from '../packages/cli/src/generators/app/templates';
+import { appTemplateFiles, standaloneCiWorkflow } from '../packages/cli/src/generators/app/templates';
 
 const OWNER = process.env.GITHUB_OWNER ?? 'mohamedhabibwork';
 const MAIN_REPO = `${OWNER}/framework`;
@@ -368,21 +368,35 @@ Starter application template for [**${MAIN_REPO}**](${MAIN_REPO_URL}) — a Lara
 
 ## Create a New Application
 
-### Option 1: GitHub CLI / "Use this template"
+### Option 1: Standalone CLI (\`bunx\`)
+
+Scaffold a fresh standalone application from the template anywhere on your machine:
 
 \`\`\`sh
+bunx @framework/cli create my-api --with-demo
+# or directly from GitHub without npm:
+bunx --package github:${OWNER}/framework-cli#standalone framework create my-api --with-demo
+\`\`\`
+
+### Option 2: GitHub CLI / "Use this template"
+
+\`\`\`sh
+bun create ${APP_REPO} my-api
+# or with the GitHub CLI:
 gh repo create my-api --template ${APP_REPO} --clone --private
 cd my-api
 cp .env.example .env
 bun install
 \`\`\`
 
-### Option 2: Framework CLI
+### Option 3: Inside the Framework Workspace
 
-From inside the [\`${MAIN_REPO}\`](${MAIN_REPO_URL}) workspace:
+From inside the [\`${MAIN_REPO}\`](${MAIN_REPO_URL}) monorepo:
 
 \`\`\`sh
-bun run cli -- create ../my-api
+bunx framework create apps/my-api --with-demo
+# or:
+bun run cli -- create apps/my-api --with-demo
 \`\`\`
 
 ## Quickstart
@@ -431,31 +445,7 @@ All \`@framework/*\` packages are linked directly to their dedicated GitHub repo
 
   const ciDir = join(stageDir, '.github', 'workflows');
   mkdirSync(ciDir, { recursive: true });
-  writeFileSync(
-    join(ciDir, 'ci.yml'),
-    `name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  check:
-    name: Typecheck
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.2
-      - run: bun install
-      - run: bun run format:check
-      - run: bun run lint
-      - run: bun run typecheck
-`,
-  );
+  writeFileSync(join(ciDir, 'ci.yml'), standaloneCiWorkflow());
 
   // Format generated template files with oxfmt before committing
   run('bunx', ['oxfmt', relPath], { capture: true, allowFail: true });

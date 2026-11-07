@@ -5,6 +5,7 @@
     "": {
       "name": "hono_template_app",
       "devDependencies": {
+        "@framework/cli": "workspace:*",
         "@types/bun": "1.4.4",
         "oxfmt": "^0.75.0",
         "oxlint": "^1.90.0",
@@ -138,6 +139,12 @@
     "packages/cli": {
       "name": "@framework/cli",
       "version": "0.2.0",
+      "bin": {
+        "framework": "./src/bin.ts",
+        "framework-cli": "./src/bin.ts",
+        "hono-framework": "./src/bin.ts",
+        "cli": "./src/bin.ts",
+      },
       "dependencies": {
         "@framework/core": "workspace:*",
         "@framework/database": "workspace:*",

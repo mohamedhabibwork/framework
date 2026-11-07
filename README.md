@@ -10,21 +10,37 @@ decisions and pinned versions: [docs/architecture/decisions.md](docs/architectur
 
 ## Quickstart
 
+### Standalone application (anywhere via `bunx`)
+
+```sh
+bunx @framework/cli create my-api --with-demo
+# or directly from GitHub:
+bunx --package github:mohamedhabibwork/framework-cli#standalone framework create my-api --with-demo
+
+cd my-api
+docker compose -f deployment/compose.yaml up -d --wait
+bun run cli -- db:migrate
+bun run dev                                    # http://127.0.0.1:3000
+```
+
+### Inside the framework workspace
+
 ```sh
 bun install                                    # workspace dependencies
 bun run db:up                                  # PostgreSQL :54329 + Redis :63799
-bun run cli -- create apps/my-api --with-demo  # app + products module + tests
+bunx framework create apps/my-api --with-demo  # app + products module + tests
 cd apps/my-api
 cp .env.example .env                           # DATABASE_URL / REDIS_URL
 bun run cli -- db:migrate
 bun run dev                                    # http://127.0.0.1:3000
 ```
 
-`create --with-demo` generates the application (config, bootstrap, providers,
-health/audit/realtime routes, server/worker/scheduler/CLI entry points, tests,
-compose) and runs `make:crud` inside it, so the first request you make is
-already covered by an endpoint suite. Full walkthrough:
-[docs/getting-started.md](docs/getting-started.md).
+`create --with-demo` generates the application from the template (config,
+bootstrap, providers, health/audit/realtime routes, server/worker/CLI entry
+points, tests, compose, Dockerfile) and runs `make:crud` inside it, so the first
+request you make is already covered by an endpoint suite. Pass `--with-auth` to
+also scaffold session + personal API token authentication (`make:auth`). Full
+walkthrough: [docs/getting-started.md](docs/getting-started.md).
 
 ## Documentation
 

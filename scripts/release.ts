@@ -35,6 +35,7 @@ import { join, resolve } from 'node:path';
 const repoRoot = resolve(import.meta.dirname, '..');
 const packageJsonPath = join(repoRoot, 'package.json');
 const templatesPath = join(repoRoot, 'packages', 'cli', 'src', 'generators', 'app', 'templates.ts');
+const cliBinPath = join(repoRoot, 'packages', 'cli', 'src', 'bin.ts');
 const changelogPath = join(repoRoot, 'CHANGELOG.md');
 
 function print(line: string) {
@@ -127,6 +128,7 @@ print(`Bumped workspace package versions to ${version}.`);
 const VERSION_PIN = /(frameworkVersion|cliVersion):\s*'[^']*'/g;
 const pinFiles = [
   templatesPath,
+  cliBinPath,
   ...readdirSync(join(repoRoot, 'apps'))
     .map((name) => join(repoRoot, 'apps', name, 'bin', 'cli.ts'))
     .filter((path) => Bun.file(path).size > 0),

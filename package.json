@@ -2,6 +2,11 @@
   "name": "hono-framework",
   "version": "0.2.0",
   "private": true,
+  "bin": {
+    "framework": "./packages/cli/src/bin.ts",
+    "framework-cli": "./packages/cli/src/bin.ts",
+    "hono-framework": "./packages/cli/src/bin.ts"
+  },
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -28,6 +33,7 @@
     "db:down": "docker compose -f deployment/compose.yaml down"
   },
   "devDependencies": {
+    "@framework/cli": "workspace:*",
     "@types/bun": "1.4.4",
     "oxfmt": "^0.75.0",
     "oxlint": "^1.90.0",
